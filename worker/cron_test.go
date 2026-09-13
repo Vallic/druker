@@ -53,9 +53,9 @@ func TestCronMatching(t *testing.T) {
 }
 
 // Restricting both day-of-month and day-of-week is an OR, not an AND. Cron has
-// worked this way since the 1970s and almost every reimplementation gets it
+// worked this way since the 1970s and almost every rewrite of it gets this
 // backwards, which turns "the 13th, and Fridays" into "Friday the 13th".
-func TestDayAndWeekdayAreOredTogether(t *testing.T) {
+func TestDayAndWeekdayMatchEitherWay(t *testing.T) {
 	schedule, err := ParseCron("0 0 13 * 5")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

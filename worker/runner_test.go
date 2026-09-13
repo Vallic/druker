@@ -148,7 +148,8 @@ func TestJobTimeoutKillsChildrenToo(t *testing.T) {
 	done := make(chan struct{})
 	started := time.Now()
 
-	// The shell forks here rather than execing, so there is a grandchild.
+	// The shell forks here rather than replacing itself, so there is a
+	// grandchild holding the pipe.
 	runner.Start(context.Background(), shellJob(1, "sleep 5 & wait", true), func() { close(done) })
 
 	<-done

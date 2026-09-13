@@ -13,7 +13,7 @@ func TestSplitCommand(t *testing.T) {
 		want    []string
 	}{
 		{"core:status", []string{"core:status"}},
-		{"advancedqueue:queue:process wa_sendgrid", []string{"advancedqueue:queue:process", "wa_sendgrid"}},
+		{"advancedqueue:queue:process mail", []string{"advancedqueue:queue:process", "mail"}},
 		{"  spaced   out  ", []string{"spaced", "out"}},
 		{`sql:query "SELECT 1 FROM node"`, []string{"sql:query", "SELECT 1 FROM node"}},
 		{`msg --text='hello world'`, []string{"msg", "--text=hello world"}},

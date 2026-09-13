@@ -1,11 +1,11 @@
 {
-  "server": "i-b433895b",
+  "server": "web-01",
   "refresh": 600,
   "jobs": [
     {
       "id": 1,
-      "name": "Process SendGrid queue",
-      "command": "advancedqueue:queue:process wa_sendgrid",
+      "name": "Process the mail queue",
+      "command": "advancedqueue:queue:process mail",
       "runner": "drush",
       "async": true,
       "depends_on": null,
@@ -14,28 +14,28 @@
     },
     {
       "id": 2,
-      "name": "Rebuild price index",
-      "command": "wa-price:rebuild",
+      "name": "Drupal cron",
+      "command": "cron",
       "runner": "drush",
       "async": false,
       "depends_on": null,
       "type": "cron",
-      "cron": "0 2 * * *"
+      "cron": "0 * * * *"
     },
     {
       "id": 3,
-      "name": "Send storage reminders",
-      "command": "wa-storage:send-reminders",
+      "name": "Rebuild the search index",
+      "command": "search-api:index",
       "runner": "drush",
       "async": true,
       "depends_on": 2,
       "type": "cron",
-      "cron": "0 3 * * *"
+      "cron": "0 2 * * *"
     },
     {
       "id": 4,
-      "name": "Weekly report",
-      "command": "wa-report:weekly",
+      "name": "Weekly log summary",
+      "command": "watchdog:show --count=100 --severity=Error",
       "runner": "drush",
       "async": true,
       "depends_on": null,
@@ -44,8 +44,8 @@
     },
     {
       "id": 5,
-      "name": "One-time data migration",
-      "command": "wa-migrate:run --batch=legacy-lots",
+      "name": "One-time content migration",
+      "command": "migrate:import example_articles",
       "runner": "drush",
       "async": false,
       "depends_on": null,
@@ -54,8 +54,8 @@
     },
     {
       "id": 6,
-      "name": "Scheduled maintenance",
-      "command": "wa-maintenance:run",
+      "name": "Rebuild caches once the migration is done",
+      "command": "cache:rebuild",
       "runner": "drush",
       "async": false,
       "depends_on": 5,
@@ -64,8 +64,8 @@
     },
     {
       "id": 7,
-      "name": "Nightly backup",
-      "command": "tar -czf /backups/site.tgz web/sites/default/files",
+      "name": "Nightly file backup",
+      "command": "tar -czf /backups/files.tgz web/sites/default/files",
       "runner": "shell",
       "async": true,
       "depends_on": null,

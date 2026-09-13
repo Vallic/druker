@@ -1,0 +1,9 @@
+# Errors accepted for now, so that new ones still fail the build.
+#
+# Regenerate with:
+#   vendor/bin/phpstan analyse --generate-baseline=phpstan-baseline.neon
+#
+# An entry here is a decision to live with something, so each one is worth a
+# comment saying why. An empty file means there is nothing to live with.
+parameters:
+  ignoreErrors: []

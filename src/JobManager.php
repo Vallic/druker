@@ -49,7 +49,7 @@ class JobManager {
    *
    * Output shape:
    * {
-   *   "server": "i-b433895b",
+   *   "server": "web-01",
    *   "refresh": 600,
    *   "jobs": [
    *     {"id": 1, "command": "...", "type": "cron", "cron": "0 2 * * *"},

@@ -210,7 +210,7 @@ class JobManagerTest extends UnitTestCase {
     $job = $this->makeCronJob(
       id: 1,
       label: 'Send emails',
-      command: 'advancedqueue:queue:process wa_sendgrid',
+      command: 'advancedqueue:queue:process mail',
       timingCron: '@daily',
       timingOnce: NULL,
       async: TRUE,
@@ -238,7 +238,7 @@ class JobManagerTest extends UnitTestCase {
     $formatted = $result['jobs'][0];
     $this->assertSame(1, $formatted['id']);
     $this->assertSame('Send emails', $formatted['name']);
-    $this->assertSame('advancedqueue:queue:process wa_sendgrid', $formatted['command']);
+    $this->assertSame('advancedqueue:queue:process mail', $formatted['command']);
     $this->assertSame('cron', $formatted['type']);
     $this->assertSame('0 0 * * *', $formatted['cron']);
     $this->assertTrue($formatted['async']);
@@ -254,7 +254,7 @@ class JobManagerTest extends UnitTestCase {
     $job = $this->makeCronJob(
       id: 2,
       label: 'One-time import',
-      command: 'wa-lot-listing:import',
+      command: 'migrate:import example_articles',
       timingCron: '',
       timingOnce: $runAt,
       async: FALSE,

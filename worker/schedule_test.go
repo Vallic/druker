@@ -24,7 +24,7 @@ func TestParsesTheDrupalSample(t *testing.T) {
 		t.Fatalf("the sample should be entirely valid, got %v", problems)
 	}
 
-	if schedule.Server != "i-b433895b" {
+	if schedule.Server != "web-01" {
 		t.Errorf("server: got %q", schedule.Server)
 	}
 
@@ -38,7 +38,7 @@ func TestParsesTheDrupalSample(t *testing.T) {
 
 	first := schedule.Jobs[0]
 
-	if first.Command != "advancedqueue:queue:process wa_sendgrid" {
+	if first.Command != "advancedqueue:queue:process mail" {
 		t.Errorf("command: got %q", first.Command)
 	}
 	if !first.Async {

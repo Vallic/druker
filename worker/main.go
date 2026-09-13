@@ -30,13 +30,13 @@ const (
 
 func main() {
 	var (
-		drushPath = flag.String("drush", "", "Path to drush. Found automatically when empty.")
-		hostname  = flag.String("host", "", "Server hostname to fetch jobs for. The machine's own when empty.")
-		statePath = flag.String("state", DefaultStatePath(), "Where to remember completed one-time jobs. Empty to not remember.")
-		workDir   = flag.String("dir", "", "Directory jobs run in. The project root above vendor/ when empty.")
-		jobTimout = flag.Duration("job-timeout", 0, "Abandon a job that runs longer than this. Zero for no limit.")
-		dryRun    = flag.Bool("dry-run", false, "Fetch the schedule, print what would run, and exit.")
-		verbose   = flag.Bool("verbose", false, "Log every tick, not only what happens.")
+		drushPath  = flag.String("drush", "", "Path to drush. Found automatically when empty.")
+		hostname   = flag.String("host", "", "Server hostname to fetch jobs for. The machine's own when empty.")
+		statePath  = flag.String("state", DefaultStatePath(), "Where to remember completed one-time jobs. Empty to not remember.")
+		workDir    = flag.String("dir", "", "Directory jobs run in. The project root above vendor/ when empty.")
+		jobTimeout = flag.Duration("job-timeout", 0, "Abandon a job that runs longer than this. Zero for no limit.")
+		dryRun     = flag.Bool("dry-run", false, "Fetch the schedule, print what would run, and exit.")
+		verbose    = flag.Bool("verbose", false, "Log every tick, not only what happens.")
 	)
 
 	flag.Parse()
@@ -81,7 +81,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	runner := NewRunner(drush, dir, logger, *jobTimout)
+	runner := NewRunner(drush, dir, logger, *jobTimeout)
 	state := LoadState(*statePath)
 
 	logger.Info("worker started", "drush", drush, "dir", dir, "state", *statePath)
@@ -104,7 +104,7 @@ func main() {
 	case <-finished:
 		logger.Info("stopped")
 	case <-time.After(shutdownGrace):
-      logger.Warn("stopped with jobs still running", "waited", shutdownGrace.String())
+		logger.Warn("stopped with jobs still running", "waited", shutdownGrace.String())
 	}
 }
 

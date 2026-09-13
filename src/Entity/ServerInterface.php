@@ -12,7 +12,7 @@ use Drupal\Core\Config\Entity\ConfigEntityInterface;
 interface ServerInterface extends ConfigEntityInterface {
 
   /**
-   * The hostname the worker reports, which is how a server is recognised.
+   * The hostname the worker reports, which is how a server is recognized.
    */
   public function getHostname(): string;
 

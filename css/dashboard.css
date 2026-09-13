@@ -119,16 +119,16 @@
 
 .druker-job__runner {
   padding: 0.05rem 0.35rem;
+  text-transform: uppercase;
+  color: #003ecc;
   border-radius: 3px;
   background: #edf5ff;
-  color: #003ecc;
   font-size: 0.75rem;
-  text-transform: uppercase;
 }
 
 .druker-job__runner--shell {
-  background: #fdf3e5;
   color: #8a4b00;
+  background: #fdf3e5;
 }
 
 .druker-job__tag {
@@ -157,17 +157,17 @@
 }
 
 .druker-day__hour {
+  text-align: center;
   color: #55565b;
   font-size: 0.7rem;
-  text-align: center;
 }
 
 .druker-day__label {
   overflow: hidden;
   padding-right: 0.5rem;
-  font-size: 0.85rem;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.85rem;
 }
 
 .druker-day__cell {
@@ -177,7 +177,7 @@
 }
 
 .druker-day__cell.is-on {
-  background: #0055ff;
+  background: #05f;
 }
 
 /* A job that runs every hour is shaded rather than a solid blue bar, so the

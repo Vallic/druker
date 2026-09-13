@@ -156,10 +156,10 @@ Group=www-data
 
 # Both given explicitly. systemd starts services in /, so nothing is found
 # by walking up, and a job's relative paths would otherwise resolve there.
-WorkingDirectory=/var/www/mysite
-ExecStart=/var/www/mysite/druker \
-    -drush /var/www/mysite/vendor/bin/drush \
-    -dir /var/www/mysite \
+WorkingDirectory=/var/www/example
+ExecStart=/var/www/example/druker \
+    -drush /var/www/example/vendor/bin/drush \
+    -dir /var/www/example \
     -state /var/lib/druker/state.json
 
 Restart=always

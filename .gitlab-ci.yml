@@ -1,0 +1,96 @@
+################
+# DrupalCI GitLabCI template
+#
+# Gitlab-ci.yml to replicate DrupalCI testing for Contrib, plus a set of jobs
+# for the Go worker — the half of this project the shared templates know
+# nothing about.
+#
+# https://project.pages.drupalcode.org/gitlab_templates/
+################
+
+include:
+  - project: $_GITLAB_TEMPLATES_REPO
+    ref: $_GITLAB_TEMPLATES_REF
+    file:
+      - '/includes/include.drupalci.main.yml'
+      - '/includes/include.drupalci.variables.yml'
+      - '/includes/include.drupalci.workflows.yml'
+
+variables:
+  _SHOW_ENVIRONMENT_VARIABLES: 1
+
+  ################
+  # Druker is Drupal 11 only, so there is no previous major to opt into.
+  ################
+  OPT_IN_TEST_NEXT_MINOR: 1
+  OPT_IN_TEST_MAX_PHP: 1
+
+  ################
+  # Twig CS Fixer reads core/.twig-cs-fixer.php, which only exists in Drupal
+  # 11.5 and later, and hard-fails without it. Remove this line once the
+  # stable core the templates target has caught up.
+  ################
+  SKIP_TWIG_CS_FIXER: '1'
+
+  _CSPELL_WORDS: 'advancedqueue, druker, endfor, gofmt, journalctl, klaxon, Međimorec, valic'
+
+  # The Go toolchain the worker is built and tested with. Kept at the version
+  # in worker/go.mod, which is a floor rather than a preference.
+  GO_IMAGE: 'golang:1.23'
+
+################
+# The worker
+#
+# Every check worker/README tells a contributor to run, run the same way
+# here. The race detector matters most: the runner is concurrent, and a data
+# race is not something a reviewer catches by reading.
+################
+
+.go-base:
+  image: $GO_IMAGE
+  stage: validate
+  needs: []
+  variables:
+    GOPATH: $CI_PROJECT_DIR/.go
+    # The runner has no git history for the module, and Go's VCS stamping
+    # fails the build rather than shrugging.
+    GOFLAGS: '-buildvcs=false'
+  cache:
+    key: go-$CI_COMMIT_REF_SLUG
+    paths:
+      - .go/pkg/mod
+  before_script:
+    - cd worker
+  rules:
+    - if: $SKIP_GO == "1"
+      when: never
+    - when: on_success
+
+go format:
+  extends: .go-base
+  script:
+    - test -z "$(gofmt -l .)" || (echo 'gofmt would rewrite these files:' && gofmt -l . && exit 1)
+
+go vet:
+  extends: .go-base
+  script:
+    - go vet ./...
+
+go test:
+  extends: .go-base
+  script:
+    # Includes the test that parses examples/sample-output.json, which is the
+    # contract between the worker and the Drupal side. If that file and
+    # JobManager::formatJob() drift apart, this is what says so.
+    - go test -race -count=1 ./...
+
+go build:
+  extends: .go-base
+  stage: build
+  script:
+    - CGO_ENABLED=0 go build -o ../druker .
+  artifacts:
+    name: druker-worker-$CI_COMMIT_REF_SLUG
+    paths:
+      - druker
+    expire_in: 1 week

@@ -1,0 +1,22 @@
+includes:
+  - phpstan-baseline.neon
+
+parameters:
+  level: 5
+
+  fileExtensions:
+    - php
+    - module
+    - inc
+    - install
+
+  # Core's docblocks are looser than what the code actually returns — an
+  # entity storage says EntityInterface and hands back the concrete class —
+  # so an instanceof that PHPStan calls redundant is genuinely load-bearing.
+  treatPhpDocTypesAsCertain: false
+
+  reportUnmatchedIgnoredErrors: false
+
+  ignoreErrors:
+    # new static() is how Drupal builds plugins and forms, everywhere.
+    - '#^Unsafe usage of new static#'

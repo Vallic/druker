@@ -39,7 +39,7 @@ final class DrukerCommands extends DrushCommands {
   #[CLI\Argument(name: 'hostname', description: 'The server to fetch jobs for. This machine when omitted.')]
   #[CLI\Option(name: 'pretty', description: 'Indent the JSON, for reading rather than parsing.')]
   #[CLI\Usage(name: 'drush druker:jobs', description: 'What the worker on this machine would run.')]
-  #[CLI\Usage(name: 'drush druker:jobs i-b433895b --pretty', description: 'What the worker on another server would run.')]
+  #[CLI\Usage(name: 'drush druker:jobs web-01 --pretty', description: 'What the worker on another server would run.')]
   public function jobs(string $hostname = '', array $options = ['pretty' => FALSE]): void {
     $hostname = $hostname !== '' ? $hostname : (string) gethostname();
     $schedule = $this->jobManager->getJobsForServer($hostname);

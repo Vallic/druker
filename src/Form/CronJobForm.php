@@ -96,7 +96,7 @@ class CronJobForm extends ContentEntityForm {
     elseif ($cron !== '' && !$this->jobManager->isValidCronExpression($cron)) {
       $form_state->setErrorByName(
         'timing_cron',
-        $this->t('"%cron" is not a valid cron expression or recognised shorthand.', ['%cron' => $cron])
+        $this->t('"%cron" is not a valid cron expression or recognized shorthand.', ['%cron' => $cron])
       );
     }
 

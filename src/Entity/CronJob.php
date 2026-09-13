@@ -133,7 +133,7 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
 
     $fields['command'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Command'))
-      ->setDescription(t('Drush command to execute, e.g. "advancedqueue:queue:process wa_sendgrid".'))
+      ->setDescription(t('Drush command to execute, e.g. "advancedqueue:queue:process mail".'))
       ->setRequired(TRUE)
       ->setSettings(['max_length' => 512])
       ->setDisplayOptions('form', ['type' => 'string_textfield', 'weight' => 0]);
