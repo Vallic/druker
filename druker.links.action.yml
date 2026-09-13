@@ -1,0 +1,11 @@
+druker_job.add:
+  route_name: entity.druker_job.add_form
+  title: 'Add Cron Job'
+  appears_on:
+    - entity.druker_job.collection
+
+druker_server.add:
+  route_name: entity.druker_server.add_form
+  title: 'Add Server'
+  appears_on:
+    - entity.druker_server.collection

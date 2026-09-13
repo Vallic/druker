@@ -1,0 +1,7 @@
+druker.dashboard:
+  path: '/admin/config/system/druker'
+  defaults:
+    _controller: '\Drupal\druker\Controller\Dashboard::build'
+    _title: 'Druker'
+  requirements:
+    _permission: 'administer druker'

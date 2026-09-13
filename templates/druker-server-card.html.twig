@@ -1,0 +1,41 @@
+{#
+/**
+ * @file
+ * One server, and everything its worker will run.
+ */
+#}
+<div class="druker-card{{ enabled ? '' : ' druker-card--off' }}">
+  <div class="druker-card__head">
+    <h3 class="druker-card__title">{{ server.label }}</h3>
+    <code class="druker-card__host">{{ hostname }}</code>
+    <span class="druker-card__meta">
+      {% if enabled %}
+        {{ 're-reads every @seconds seconds'|t({'@seconds': refresh}) }}
+      {% else %}
+        {{ 'disabled'|t }}
+      {% endif %}
+    </span>
+    <a class="druker-card__edit" href="{{ edit_url }}">{{ 'Edit'|t }}</a>
+  </div>
+
+  {% if stranded %}
+    <p class="druker-card__stranded">
+      {{ 'Disabled, so no worker matches this hostname. @count of its own jobs are picked up by nobody.'|t({'@count': stranded}) }}
+    </p>
+  {% endif %}
+
+  {% if jobs %}
+    <ul class="druker-card__jobs">
+      {% for job in jobs %}
+        <li class="druker-job{{ job.shared ? ' druker-job--shared' : '' }}">
+          <a class="druker-job__name" href="{{ job.url }}">{{ job.label }}</a>
+          <span class="druker-job__schedule"><code>{{ job.schedule }}</code></span>
+          <span class="druker-job__runner druker-job__runner--{{ job.runner }}">{{ job.runner }}</span>
+          {% if job.shared %}<span class="druker-job__tag">{{ 'every server'|t }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="druker-card__empty">{{ 'Nothing assigned, and no jobs that run everywhere.'|t }}</p>
+  {% endif %}
+</div>

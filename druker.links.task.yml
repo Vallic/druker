@@ -1,0 +1,47 @@
+# The three sections, as tabs across the top of every Druker page.
+druker.dashboard:
+  title: Dashboard
+  route_name: druker.dashboard
+  base_route: druker.dashboard
+  weight: -10
+
+druker.tasks.jobs:
+  title: 'Cron Jobs'
+  route_name: entity.druker_job.collection
+  base_route: druker.dashboard
+  weight: 0
+
+druker.tasks.servers:
+  title: Servers
+  route_name: entity.druker_server.collection
+  base_route: druker.dashboard
+  weight: 10
+
+# And per item, so a job or a server opens onto its own tabs.
+entity.druker_job.canonical:
+  title: View
+  route_name: entity.druker_job.canonical
+  base_route: entity.druker_job.canonical
+
+entity.druker_job.edit_form:
+  title: Edit
+  route_name: entity.druker_job.edit_form
+  base_route: entity.druker_job.canonical
+  weight: 10
+
+entity.druker_job.delete_form:
+  title: Delete
+  route_name: entity.druker_job.delete_form
+  base_route: entity.druker_job.canonical
+  weight: 20
+
+entity.druker_server.edit_form:
+  title: Edit
+  route_name: entity.druker_server.edit_form
+  base_route: entity.druker_server.edit_form
+
+entity.druker_server.delete_form:
+  title: Delete
+  route_name: entity.druker_server.delete_form
+  base_route: entity.druker_server.edit_form
+  weight: 10

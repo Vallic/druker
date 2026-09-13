@@ -1,0 +1,28 @@
+{#
+/**
+ * @file
+ * The day, hour by hour, so a pile-up at three in the morning is visible.
+ */
+#}
+<div class="druker-day">
+  <h3>{{ 'Across the day'|t }}</h3>
+
+  <div class="druker-day__grid" style="--druker-hours: {{ hours|length }}">
+    <div class="druker-day__label"></div>
+    {% for hour in hours %}
+      <div class="druker-day__hour">{{ hour }}</div>
+    {% endfor %}
+
+    {% for row in rows %}
+      <div class="druker-day__label">
+        <a href="{{ row.url }}">{{ row.label }}</a>
+      </div>
+      {% for hour in hours %}
+        <div class="druker-day__cell{{ hour in row.hours ? ' is-on' : '' }}{{ row.busy ? ' is-busy' : '' }}"
+             title="{{ row.label }}{% if hour in row.hours %} — {{ hour }}:00{% endif %}"></div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  <p class="druker-day__note">{{ 'One-time jobs are not shown; they have a date rather than a shape.'|t }}</p>
+</div>

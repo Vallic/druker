@@ -1,0 +1,15 @@
+{
+    "name": "drupal/druker",
+    "type": "drupal-module",
+    "description": "Manage a server's cron schedule in Drupal, and let a small Go worker run it.",
+    "keywords": ["Drupal", "cron", "scheduler", "jobs", "worker", "drush"],
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://www.drupal.org/project/druker",
+    "require": {
+        "php": ">=8.3",
+        "drupal/core": "^11"
+    },
+    "suggest": {
+        "drush/drush": "The worker fetches its schedule with drush druker:jobs, so a site running the worker needs Drush."
+    }
+}

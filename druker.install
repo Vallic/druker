@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * @file
+ * Install and update hooks for Druker.
+ */
+
+declare(strict_types=1);
+
+use Drupal\druker\Entity\CronJob;
+
+/**
+ * Adds the runner field, so a job can say it is a shell command line.
+ */
+function druker_update_11001(): string {
+  \Drupal::entityDefinitionUpdateManager()
+    ->installFieldStorageDefinition('runner', 'druker_job', 'druker', CronJob::runnerFieldDefinition());
+
+  return (string) t('Existing jobs keep running through Drush, which is the default.');
+}

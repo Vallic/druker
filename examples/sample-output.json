@@ -1,0 +1,76 @@
+{
+  "server": "i-b433895b",
+  "refresh": 600,
+  "jobs": [
+    {
+      "id": 1,
+      "name": "Process SendGrid queue",
+      "command": "advancedqueue:queue:process wa_sendgrid",
+      "runner": "drush",
+      "async": true,
+      "depends_on": null,
+      "type": "cron",
+      "cron": "* * * * *"
+    },
+    {
+      "id": 2,
+      "name": "Rebuild price index",
+      "command": "wa-price:rebuild",
+      "runner": "drush",
+      "async": false,
+      "depends_on": null,
+      "type": "cron",
+      "cron": "0 2 * * *"
+    },
+    {
+      "id": 3,
+      "name": "Send storage reminders",
+      "command": "wa-storage:send-reminders",
+      "runner": "drush",
+      "async": true,
+      "depends_on": 2,
+      "type": "cron",
+      "cron": "0 3 * * *"
+    },
+    {
+      "id": 4,
+      "name": "Weekly report",
+      "command": "wa-report:weekly",
+      "runner": "drush",
+      "async": true,
+      "depends_on": null,
+      "type": "cron",
+      "cron": "0 0 * * 0"
+    },
+    {
+      "id": 5,
+      "name": "One-time data migration",
+      "command": "wa-migrate:run --batch=legacy-lots",
+      "runner": "drush",
+      "async": false,
+      "depends_on": null,
+      "type": "once",
+      "run_at": 1747392000
+    },
+    {
+      "id": 6,
+      "name": "Scheduled maintenance",
+      "command": "wa-maintenance:run",
+      "runner": "drush",
+      "async": false,
+      "depends_on": 5,
+      "type": "once",
+      "run_at": 1747478400
+    },
+    {
+      "id": 7,
+      "name": "Nightly backup",
+      "command": "tar -czf /backups/site.tgz web/sites/default/files",
+      "runner": "shell",
+      "async": true,
+      "depends_on": null,
+      "type": "cron",
+      "cron": "30 2 * * *"
+    }
+  ]
+}

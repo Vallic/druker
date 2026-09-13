@@ -1,0 +1,7 @@
+services:
+  druker.job_manager:
+    class: Drupal\druker\JobManager
+    arguments:
+      - '@entity_type.manager'
+      - '@event_dispatcher'
+      - '@settings'

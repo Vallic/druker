@@ -1,0 +1,3 @@
+administer druker:
+  title: 'Administer Druker jobs and servers'
+  restrict access: true

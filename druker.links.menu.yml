@@ -1,0 +1,27 @@
+druker.admin:
+  title: Druker
+  description: 'Scheduled jobs, the servers that run them, and what each worker will pick up.'
+  route_name: druker.dashboard
+  parent: system.admin_config_system
+  weight: 50
+
+druker.admin.dashboard:
+  title: Dashboard
+  description: 'What each server is going to run.'
+  route_name: druker.dashboard
+  parent: druker.admin
+  weight: -10
+
+druker.admin.jobs:
+  title: 'Cron Jobs'
+  description: 'A command, and when to run it.'
+  route_name: entity.druker_job.collection
+  parent: druker.admin
+  weight: 0
+
+druker.admin.servers:
+  title: Servers
+  description: 'The machines running a worker, matched by hostname.'
+  route_name: entity.druker_server.collection
+  parent: druker.admin
+  weight: 10
