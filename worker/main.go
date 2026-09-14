@@ -37,6 +37,7 @@ func main() {
 		jobTimeout = flag.Duration("job-timeout", 0, "Abandon a job that runs longer than this. Zero for no limit.")
 		dryRun     = flag.Bool("dry-run", false, "Fetch the schedule, print what would run, and exit.")
 		verbose    = flag.Bool("verbose", false, "Log every tick, not only what happens.")
+		logFormat  = flag.String("log-format", logFormatText, "Log format: text or json.")
 	)
 
 	flag.Parse()
@@ -46,7 +47,14 @@ func main() {
 		level = slog.LevelDebug
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	handler, err := newLogHandler(*logFormat, level, os.Stdout)
+	if err != nil {
+		// Too early for a logger: the logger is what failed to build.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	logger := slog.New(handler)
 
 	drush, err := resolveDrush(*drushPath)
 	if err != nil {

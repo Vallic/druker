@@ -102,11 +102,15 @@ Build it into the project root — the directory holding `vendor/` and
 `composer.json`:
 
 ```bash
-cd worker
-go build -o ../../../../druker .   # or wherever your project root is
+cd web/modules/contrib/druker/worker
+go build -o /path/to/project/druker .
 cd /path/to/project
 ./druker
 ```
+
+Give `-o` an absolute path. A relative one is counted from `worker/`, and how
+far up the project root sits depends on whether the site has a `web/` docroot,
+so the same `../../../..` lands somewhere different on two installs.
 
 That is the one place it needs no arguments. Started from there it finds
 `vendor/bin/drush` immediately, and everything below follows from it.
@@ -136,10 +140,28 @@ level=ERROR msg="cannot find drush" error="no vendor/bin/drush above [/ /tmp]; p
 | `-state` | Where completed one-time jobs are remembered |
 | `-job-timeout` | Abandon a job that runs longer than this |
 | `-verbose` | Log every minute it evaluates, not only what it does |
+| `-log-format` | `text` (default) or `json` |
 
-Logs are `log/slog` text on stdout, one line per event, which is what a
-container platform wants. Send `SIGTERM` and it stops scheduling and gives
-running jobs 30 seconds to finish.
+Logs go to stdout, one line per event, which is what a container platform
+wants. The default is `log/slog` text — logfmt, for someone reading
+`journalctl`:
+
+```
+time=2026-09-14T10:45:14.214+02:00 level=INFO msg="schedule loaded" server=web13 jobs=7 next_check_in=5m0s
+```
+
+`-log-format=json` emits the same events and the same keys as one JSON object
+per line, for a shipper that would otherwise have to parse them back out:
+
+```json
+{"time":"2026-09-14T10:45:14.214+02:00","level":"INFO","msg":"schedule loaded","server":"web13","jobs":7,"next_check_in":"5m0s"}
+```
+
+The keys do not change between the two, so a query written against one format
+still finds things in the other. Every line carries `server`, and job lines
+carry `job`, so one collector can hold several servers and still separate
+them. Send `SIGTERM` and the worker stops scheduling and gives running jobs 30
+seconds to finish.
 
 ### Under systemd
 

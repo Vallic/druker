@@ -3,9 +3,18 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"time"
+)
+
+// The log formats -log-format accepts.
+const (
+	logFormatText = "text"
+	logFormatJSON = "json"
 )
 
 // contextWithTimeout is a timeout context, or a plain one when timeout is 0.
@@ -78,4 +87,23 @@ func SplitCommand(command string) []string {
 	}
 
 	return args
+}
+
+// newLogHandler builds the log handler for a format name.
+//
+// Text is what someone tailing journalctl wants to read; JSON is what a log
+// shipper wants to parse. Both carry the same keys, so a query written against
+// one holds for the other.
+func newLogHandler(format string, level slog.Level, out io.Writer) (slog.Handler, error) {
+	options := &slog.HandlerOptions{Level: level}
+
+	switch format {
+	case "", logFormatText:
+		return slog.NewTextHandler(out, options), nil
+
+	case logFormatJSON:
+		return slog.NewJSONHandler(out, options), nil
+	}
+
+	return nil, fmt.Errorf("unknown log format %q, expected %s or %s", format, logFormatText, logFormatJSON)
 }
