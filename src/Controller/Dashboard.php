@@ -118,10 +118,14 @@ class Dashboard extends ControllerBase {
         $messages[] = $this->t('%job has a schedule the worker cannot read, so it never runs.', ['%job' => $label]);
       }
 
-      $server_id = $job->getServerId();
+      $named = $job->getServerIds();
+      $reachable = array_filter($named, static fn(string $id): bool => isset($servers[$id]) && $servers[$id]->status());
 
-      if ($server_id !== NULL && (!isset($servers[$server_id]) || !$servers[$server_id]->status())) {
-        $messages[] = $this->t('%job is assigned to a server that is missing or disabled, so nothing picks it up.', ['%job' => $label]);
+      if ($named !== [] && $reachable === []) {
+        $messages[] = $this->t('%job names only servers that are missing or disabled, so nothing picks it up.', ['%job' => $label]);
+      }
+      elseif (count($reachable) < count($named)) {
+        $messages[] = $this->t('%job names a server that is missing or disabled. The others still run it.', ['%job' => $label]);
       }
     }
 
@@ -146,7 +150,7 @@ class Dashboard extends ControllerBase {
       '#attributes' => ['class' => ['druker-servers']],
     ];
 
-    $shared = array_filter($jobs, static fn(CronJobInterface $job): bool => $job->getServerId() === NULL && (bool) $job->get('status')->value);
+    $shared = array_filter($jobs, static fn(CronJobInterface $job): bool => $job->getServerIds() === [] && (bool) $job->get('status')->value);
 
     if ($servers === []) {
       $build['none'] = [
@@ -159,7 +163,7 @@ class Dashboard extends ControllerBase {
     foreach ($servers as $id => $server) {
       assert($server instanceof ServerInterface);
 
-      $own = array_filter($jobs, static fn(CronJobInterface $job): bool => $job->getServerId() === $id && (bool) $job->get('status')->value);
+      $own = array_filter($jobs, static fn(CronJobInterface $job): bool => in_array((string) $id, $job->getServerIds(), TRUE) && (bool) $job->get('status')->value);
 
       // A disabled server is not matched by hostname, so its worker falls
       // through to the jobs that belong to no server — and the ones assigned
@@ -193,7 +197,7 @@ class Dashboard extends ControllerBase {
       'label' => $job->label(),
       'command' => $job->getCommand(),
       'runner' => $job->getRunner(),
-      'shared' => $job->getServerId() === NULL,
+      'shared' => $job->getServerIds() === [],
       'schedule' => $once !== NULL
         ? $this->t('once')
         : $this->jobManager->resolveCronExpression($job->getTimingCron()),
@@ -260,9 +264,20 @@ class Dashboard extends ControllerBase {
       return FALSE;
     }
 
-    $server_id = $job->getServerId();
+    $named = $job->getServerIds();
 
-    return $server_id === NULL || (isset($servers[$server_id]) && $servers[$server_id]->status());
+    if ($named === []) {
+      return TRUE;
+    }
+
+    // One reachable server is enough: the others being off does not stop it.
+    foreach ($named as $id) {
+      if (isset($servers[$id]) && $servers[$id]->status()) {
+        return TRUE;
+      }
+    }
+
+    return FALSE;
   }
 
 }

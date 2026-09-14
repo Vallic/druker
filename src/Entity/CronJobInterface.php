@@ -45,9 +45,12 @@ interface CronJobInterface extends ContentEntityInterface {
   public function getTimingOnce(): ?int;
 
   /**
-   * The server this job belongs to, or NULL to run it on every server.
+   * The servers this job runs on.
+   *
+   * @return string[]
+   *   Server IDs. An empty array means every server runs it.
    */
-  public function getServerId(): ?string;
+  public function getServerIds(): array;
 
   /**
    * Whether the Go binary should run this job in a goroutine (non-blocking).

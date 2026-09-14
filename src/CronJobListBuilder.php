@@ -174,15 +174,24 @@ class CronJobListBuilder extends EntityListBuilder {
    * Which server runs it.
    */
   protected function server(CronJobInterface $job) {
-    $id = $job->getServerId();
+    $ids = $job->getServerIds();
 
-    if ($id === NULL) {
+    if ($ids === []) {
       return $this->t('Every server');
     }
 
-    $server = $this->entityTypeManager->getStorage('druker_server')->load($id);
+    $servers = $this->entityTypeManager->getStorage('druker_server')->loadMultiple($ids);
+    $names = [];
 
-    return $server !== NULL ? $server->label() : $this->t('Unknown (@id)', ['@id' => $id]);
+    foreach ($ids as $id) {
+      $names[] = isset($servers[$id])
+        ? (string) $servers[$id]->label()
+        : (string) $this->t('Unknown (@id)', ['@id' => $id]);
+    }
+
+    sort($names);
+
+    return implode(', ', $names);
   }
 
   /**

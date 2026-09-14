@@ -10,6 +10,7 @@ use Drupal\Core\Entity\ContentEntityDeleteForm;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Entity\Routing\AdminHtmlRouteProvider;
 use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\druker\CronJobListBuilder;
 use Drupal\druker\Form\CronJobForm;
@@ -90,11 +91,16 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
   /**
    * {@inheritdoc}
    */
-  public function getServerId(): ?string {
-    if ($this->get('server')->isEmpty()) {
-      return NULL;
+  public function getServerIds(): array {
+    $ids = [];
+
+    foreach ($this->get('server')->getValue() as $item) {
+      if (($item['target_id'] ?? '') !== '') {
+        $ids[] = (string) $item['target_id'];
+      }
     }
-    return $this->get('server')->target_id;
+
+    return $ids;
   }
 
   /**
@@ -151,11 +157,7 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setDescription(t('Date and time to run this job once. Leave empty for recurring jobs.'))
       ->setDisplayOptions('form', ['type' => 'datetime_timestamp', 'weight' => 6]);
 
-    $fields['server'] = BaseFieldDefinition::create('entity_reference')
-      ->setLabel(t('Server'))
-      ->setDescription(t('Server to run this job on. Leave empty to run on all active servers.'))
-      ->setSetting('target_type', 'druker_server')
-      ->setDisplayOptions('form', ['type' => 'options_select', 'weight' => 10]);
+    $fields['server'] = self::serverFieldDefinition();
 
     $fields['async'] = BaseFieldDefinition::create('boolean')
       ->setLabel(t('Run asynchronously'))
@@ -170,6 +172,23 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setDisplayOptions('form', ['type' => 'options_select', 'weight' => 16]);
 
     return $fields;
+  }
+
+  /**
+   * The server field, also used by the update that made it multi-value.
+   *
+   * A job can name more than one server. Some queues are worth working from
+   * several boxes at once — Advanced Queue hands each worker different items,
+   * so three servers on one queue is three times the throughput rather than
+   * the same work done three times.
+   */
+  public static function serverFieldDefinition(): BaseFieldDefinition {
+    return BaseFieldDefinition::create('entity_reference')
+      ->setLabel(t('Servers'))
+      ->setDescription(t('The servers this job runs on. Leave every box clear to run it on all of them.'))
+      ->setSetting('target_type', 'druker_server')
+      ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
+      ->setDisplayOptions('form', ['type' => 'options_buttons', 'weight' => 10]);
   }
 
   /**

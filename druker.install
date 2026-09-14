@@ -18,3 +18,37 @@ function druker_update_11001(): string {
 
   return (string) t('Existing jobs keep running through Drush, which is the default.');
 }
+
+/**
+ * Lets a job name more than one server.
+ */
+function druker_update_11002(): string {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  $storage_definition = $manager->getFieldStorageDefinition('server', 'druker_job');
+
+  // A base field cannot change cardinality in place: single-value lives in a
+  // column on the entity table, multi-value in a table of its own. So the
+  // assignments are read out, the field is rebuilt, and they are written
+  // back through the entity API.
+  $assignments = \Drupal::database()->select('druker_job', 'j')
+    ->fields('j', ['id', 'server'])
+    ->isNotNull('server')
+    ->execute()
+    ->fetchAllKeyed();
+
+  if ($storage_definition !== NULL) {
+    $manager->uninstallFieldStorageDefinition($storage_definition);
+  }
+
+  $manager->installFieldStorageDefinition('server', 'druker_job', 'druker', CronJob::serverFieldDefinition());
+
+  foreach ($assignments as $id => $server) {
+    $job = CronJob::load($id);
+
+    if ($job instanceof CronJob) {
+      $job->set('server', [$server])->save();
+    }
+  }
+
+  return (string) t('@count jobs kept the server they were assigned to.', ['@count' => count($assignments)]);
+}
