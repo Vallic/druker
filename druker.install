@@ -52,3 +52,28 @@ function druker_update_11002(): string {
 
   return (string) t('@count jobs kept the server they were assigned to.', ['@count' => count($assignments)]);
 }
+
+/**
+ * Store the server enabled flag as a boolean, as the config schema says.
+ */
+function druker_update_11003(): string {
+  $fixed = 0;
+
+  foreach (\Drupal::configFactory()->listAll('druker.server.') as $name) {
+    $config = \Drupal::configFactory()->getEditable($name);
+    $status = $config->get('status');
+
+    // Saving a server through the entity API normalizes this, so the stray
+    // integers come from config written straight through the config factory
+    // — a seed script, or a hand-edited YAML. Schema validation rejects it,
+    // which breaks config import on a strict site.
+    if (is_bool($status)) {
+      continue;
+    }
+
+    $config->set('status', (bool) $status)->save();
+    $fixed++;
+  }
+
+  return (string) t('@count servers had their enabled flag corrected.', ['@count' => $fixed]);
+}
