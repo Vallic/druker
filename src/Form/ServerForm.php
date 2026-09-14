@@ -7,6 +7,7 @@ namespace Drupal\druker\Form;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\druker\Entity\ServerInterface;
+use Drupal\druker\Event\CollectJobsEvent;
 
 /**
  * Add and edit form for servers.
@@ -50,10 +51,10 @@ class ServerForm extends EntityForm {
       '#type' => 'number',
       '#title' => $this->t('Re-read the schedule every'),
       '#field_suffix' => $this->t('seconds'),
-      '#min' => 10,
+      '#min' => CollectJobsEvent::MINIMUM_REFRESH,
       '#default_value' => $server->getDefaultRefresh(),
       '#required' => TRUE,
-      '#description' => $this->t('How long a change made here takes to reach this server. Shorter means more Drush calls doing nothing; ten minutes is a reasonable default.'),
+      '#description' => $this->t('How long a change made here takes to reach this server. Shorter means more Drush calls doing nothing, and the worker will not go below @minimum seconds however low this is set; half an hour is a reasonable default.', ['@minimum' => CollectJobsEvent::MINIMUM_REFRESH]),
     ];
 
     $form['status'] = [

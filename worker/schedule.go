@@ -35,6 +35,22 @@ type Schedule struct {
 }
 
 const (
+	// DefaultRefresh is used when the payload does not say how long to wait.
+	// Matches CollectJobsEvent::DEFAULT_REFRESH on the Drupal side.
+	DefaultRefresh = 30 * time.Minute
+)
+
+// MinimumRefresh is the shortest period the worker will honour, whatever it
+// is told. Drupal clamps to the same floor, so this only catches a payload
+// from an older site or one written by hand — but a zero here means a context
+// that expires instantly and a loop that asks Drupal for its schedule as fast
+// as Drush can answer.
+//
+// A variable rather than a constant only so the tests covering the supervise
+// loop can shorten it; nothing at runtime writes to it.
+var MinimumRefresh = time.Minute
+
+const (
 	typeCron = "cron"
 	typeOnce = "once"
 
@@ -195,4 +211,17 @@ func ParseSchedule(payload []byte) (*Schedule, error) {
 	}
 
 	return &schedule, nil
+}
+
+// RefreshPeriod is how long to wait before asking for the schedule again.
+func (s *Schedule) RefreshPeriod() time.Duration {
+	if s.Refresh <= 0 {
+		return DefaultRefresh
+	}
+
+	if refresh := time.Duration(s.Refresh) * time.Second; refresh > MinimumRefresh {
+		return refresh
+	}
+
+	return MinimumRefresh
 }

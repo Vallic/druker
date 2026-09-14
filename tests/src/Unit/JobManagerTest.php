@@ -200,7 +200,7 @@ class JobManagerTest extends UnitTestCase {
 
     $result = $this->manager->getJobsForServer('unknown-host');
 
-    $this->assertSame(600, $result['refresh']);
+    $this->assertSame(CollectJobsEvent::DEFAULT_REFRESH, $result['refresh']);
   }
 
   /**
@@ -483,7 +483,7 @@ class JobManagerTest extends UnitTestCase {
     $payload = $this->manager->getJobsForServer('a-machine-nobody-configured');
 
     $this->assertSame('a-machine-nobody-configured', $payload['server']);
-    $this->assertSame(600, $payload['refresh'], 'And the default refresh, since no server said otherwise.');
+    $this->assertSame(CollectJobsEvent::DEFAULT_REFRESH, $payload['refresh'], 'And the default refresh, since no server said otherwise.');
   }
 
   /**

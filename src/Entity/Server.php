@@ -9,6 +9,7 @@ use Drupal\Core\Entity\Attribute\ConfigEntityType;
 use Drupal\Core\Entity\EntityDeleteForm;
 use Drupal\Core\Entity\Routing\AdminHtmlRouteProvider;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\druker\Event\CollectJobsEvent;
 use Drupal\druker\Form\ServerForm;
 use Drupal\druker\ServerListBuilder;
 
@@ -77,7 +78,7 @@ class Server extends ConfigEntityBase implements ServerInterface {
   /**
    * Seconds between the worker asking for its schedule again.
    */
-  protected int $default_refresh = 600;
+  protected int $default_refresh = CollectJobsEvent::DEFAULT_REFRESH;
 
   /**
    * {@inheritdoc}

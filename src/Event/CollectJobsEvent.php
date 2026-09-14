@@ -36,13 +36,27 @@ class CollectJobsEvent extends Event {
    * Each refresh is a Drush call on every server. Below this the worker
    * spends more time asking what to do than doing it.
    */
-  public const MINIMUM_REFRESH = 10;
+  public const MINIMUM_REFRESH = 60;
+
+  /**
+   * The refresh used when nothing says otherwise.
+   *
+   * A schedule is edited by a person, so it changes on the timescale people
+   * work at. Half an hour is soon enough for an edit to take effect without
+   * a deploy, and rare enough that the asking costs nothing.
+   */
+  public const DEFAULT_REFRESH = 1800;
 
   public function __construct(
     private readonly string $hostname,
     private array $jobs = [],
-    private int $refresh = 600,
-  ) {}
+    private int $refresh = self::DEFAULT_REFRESH,
+  ) {
+    // The floor applies to what the server was configured with as much as to
+    // what a subscriber asks for. A stored value can predate the minimum, or
+    // have been written straight into the config YAML.
+    $this->refresh = max(self::MINIMUM_REFRESH, $this->refresh);
+  }
 
   /**
    * The server the jobs are being collected for.

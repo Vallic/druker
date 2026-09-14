@@ -33,6 +33,26 @@ class CollectJobsEventTest extends UnitTestCase {
   }
 
   /**
+   * An event told nothing comes out on the module default.
+   */
+  public function testRefreshFallsBackToTheDefault(): void {
+    $event = new CollectJobsEvent('web-01');
+    $this->assertSame(CollectJobsEvent::DEFAULT_REFRESH, $event->getRefresh());
+    $this->assertSame(1800, $event->getRefresh());
+  }
+
+  /**
+   * The floor applies to what was configured, not only to what is asked for.
+   *
+   * A server saved before the minimum existed, or a config YAML written by
+   * hand, can carry a value the worker should not be made to honour.
+   */
+  public function testStoredRefreshBelowTheFloorIsClamped(): void {
+    $event = new CollectJobsEvent('web-01', [], 5);
+    $this->assertSame(CollectJobsEvent::MINIMUM_REFRESH, $event->getRefresh());
+  }
+
+  /**
    * A subscriber can move it, in either direction.
    */
   public function testSubscriberCanChangeTheRefresh(): void {

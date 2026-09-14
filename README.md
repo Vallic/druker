@@ -83,6 +83,15 @@ machine should be running, keeps those jobs on their schedules, and asks again
 every refresh period — so a change made in the UI takes effect without a deploy
 and without a restart.
 
+The refresh is set per server and defaults to **30 minutes**. A schedule is
+edited by a person, so it changes on the timescale people work at; half an
+hour is soon enough for an edit to land and rare enough that the asking costs
+nothing. **One minute is the floor**, enforced on both sides — the site clamps
+what it sends and the worker clamps what it is told, so neither a subscriber
+asking for two seconds nor a hand-edited config YAML can put a server into a
+loop that spends more time asking what to do than doing it. A payload with no
+refresh at all falls back to the 30-minute default rather than to zero.
+
 They meet at one command:
 
 ```

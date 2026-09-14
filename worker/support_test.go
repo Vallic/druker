@@ -114,3 +114,89 @@ func TestNewLogHandlerRespectsLevel(t *testing.T) {
 		t.Errorf("debug logged below the level: %s", out.String())
 	}
 }
+
+// A command or a line of output must not carry a live credential into the log.
+func TestRedact(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			"long flag with equals",
+			"user:password admin --password=hunter2",
+			"user:password admin --password=***",
+		},
+		{
+			"quoted value",
+			`migrate:import --token="ab cd" --limit=5`,
+			`migrate:import --token=*** --limit=5`,
+		},
+		{
+			"separate argument",
+			"remote:sync --api-key hunter2 --verbose",
+			"remote:sync --api-key *** --verbose",
+		},
+		{
+			"environment assignment in output",
+			"PGPASSWORD=hunter2 psql -c 'select 1'",
+			"PGPASSWORD=*** psql -c 'select 1'",
+		},
+		{
+			"json in output",
+			`{"access_token": "abc123", "expires": 3600}`,
+			`{"access_token": ***, "expires": 3600}`,
+		},
+		{
+			// --uri is not a secret name, so only the password goes. Which
+			// host the job was talking to stays readable, which is the point.
+			"credentials in a url",
+			"sql:query --uri=mysql://drupal:hunter2@db:3306/site",
+			"sql:query --uri=mysql://drupal:***@db:3306/site",
+		},
+		{
+			"bare url in output",
+			"connecting to mysql://drupal:hunter2@db:3306/site",
+			"connecting to mysql://drupal:***@db:3306/site",
+		},
+		{
+			// The header name matches too, so the whole value goes. Better
+			// that than the ordering bug where "Bearer" is hidden and the
+			// token it introduces is not.
+			"authorization header echoed by a job",
+			"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9",
+			"Authorization: ***",
+		},
+		{
+			"bearer token with no header name around it",
+			"retrying with bearer eyJhbGciOiJIUzI1NiJ9 now",
+			"retrying with bearer *** now",
+		},
+		{
+			"nothing to hide is left alone",
+			"advancedqueue:queue:process feeds --items-limit=100",
+			"advancedqueue:queue:process feeds --items-limit=100",
+		},
+		{
+			"a flag that merely sounds alarming keeps its value",
+			"sapi-i product_registrations --batch-size=50",
+			"sapi-i product_registrations --batch-size=50",
+		},
+	}
+
+	for _, c := range cases {
+		if got := Redact(c.text); got != c.want {
+			t.Errorf("%s:\n got %q\nwant %q", c.name, got, c.want)
+		}
+	}
+}
+
+// Output reaches the log through trimForLog, so the filter has to sit there
+// too and not only on the command.
+func TestTrimForLogRedacts(t *testing.T) {
+	got := trimForLog("connecting\nwith --password=hunter2 now")
+
+	if strings.Contains(got, "hunter2") {
+		t.Errorf("secret survived: %s", got)
+	}
+}

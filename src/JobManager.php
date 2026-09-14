@@ -50,7 +50,7 @@ class JobManager {
    * Output shape:
    * {
    *   "server": "web-01",
-   *   "refresh": 600,
+   *   "refresh": 1800,
    *   "jobs": [
    *     {"id": 1, "command": "...", "type": "cron", "cron": "0 2 * * *"},
    *     {"id": 2, "command": "...", "type": "once", "run_at": 1747392000}
@@ -59,7 +59,7 @@ class JobManager {
    */
   public function getJobsForServer(string $hostname): array {
     $server = $this->resolveServer($hostname);
-    $refresh = $server ? $server->getDefaultRefresh() : 600;
+    $refresh = $server ? $server->getDefaultRefresh() : CollectJobsEvent::DEFAULT_REFRESH;
 
     $storage = $this->entityTypeManager->getStorage('druker_job');
     $query = $storage->getQuery()

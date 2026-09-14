@@ -144,7 +144,7 @@ func supervise(ctx context.Context, logger *slog.Logger, runner *Runner, state *
 			logger.Warn("ignoring a job", "reason", problem.Error())
 		}
 
-		refresh := time.Duration(schedule.Refresh) * time.Second
+		refresh := schedule.RefreshPeriod()
 
 		// Nothing to do is a normal state, not an error, and it has to cost
 		// nothing: wait out the refresh and ask again. Falling through here
@@ -283,7 +283,7 @@ func dryRunSchedule(drush, host string, logger *slog.Logger) int {
 	problems := schedule.Prepare()
 
 	fmt.Printf("Server:  %s\n", schedule.Server)
-	fmt.Printf("Refresh: %d seconds\n", schedule.Refresh)
+	fmt.Printf("Refresh: %s\n", schedule.RefreshPeriod())
 	fmt.Printf("Jobs:    %d\n\n", len(schedule.Jobs))
 
 	// Sized to the widest label rather than a guess: a real schedule has job

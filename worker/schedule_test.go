@@ -210,3 +210,29 @@ func TestRejectsRubbish(t *testing.T) {
 		t.Error("should not have parsed")
 	}
 }
+
+// The worker does not trust the payload's refresh: a zero is a context that
+// expires instantly, and the loop would ask Drupal for its schedule as fast
+// as Drush can answer.
+func TestRefreshPeriod(t *testing.T) {
+	cases := []struct {
+		name    string
+		refresh int
+		want    time.Duration
+	}{
+		{"absent", 0, DefaultRefresh},
+		{"negative", -5, DefaultRefresh},
+		{"below the floor", 2, MinimumRefresh},
+		{"exactly the floor", 60, MinimumRefresh},
+		{"a normal value", 300, 5 * time.Minute},
+		{"the default", 1800, 30 * time.Minute},
+	}
+
+	for _, c := range cases {
+		schedule := &Schedule{Refresh: c.refresh}
+
+		if got := schedule.RefreshPeriod(); got != c.want {
+			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		}
+	}
+}

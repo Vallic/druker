@@ -173,7 +173,7 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 	}
 
 	started := time.Now()
-	r.logger.Info("started", "job", job.Label(), "runner", job.Runner, "command", job.Command)
+	r.logger.Info("started", "job", job.Label(), "runner", job.Runner, "command", Redact(job.Command))
 
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = os.Environ()

@@ -46,6 +46,10 @@ func (c *countingFetch) count() int {
 // is watching, and a worker that busy-loops against Drupal in that state
 // would sit there hammering it until someone noticed the load.
 func TestAnEmptyScheduleWaitsRatherThanSpinning(t *testing.T) {
+	// The production floor is a minute, which no test can wait out.
+	defer func(floor time.Duration) { MinimumRefresh = floor }(MinimumRefresh)
+	MinimumRefresh = 10 * time.Millisecond
+
 	fetcher := &countingFetch{schedule: &Schedule{Refresh: 1, Jobs: nil}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
@@ -67,6 +71,10 @@ func TestAnEmptyScheduleWaitsRatherThanSpinning(t *testing.T) {
 
 // A schedule whose every job was dropped as unreadable is just as empty.
 func TestAScheduleOfOnlyBadJobsAlsoWaits(t *testing.T) {
+	// The production floor is a minute, which no test can wait out.
+	defer func(floor time.Duration) { MinimumRefresh = floor }(MinimumRefresh)
+	MinimumRefresh = 10 * time.Millisecond
+
 	fetcher := &countingFetch{
 		schedule: &Schedule{
 			Refresh: 1,
@@ -107,6 +115,10 @@ func TestAFailedFetchBacksOff(t *testing.T) {
 // This is how a subscriber altering the refresh in Drupal reaches the worker:
 // the cycle is only ever as long as the schedule it was given said.
 func TestTheRefreshFromDrupalIsWhatTheCycleUses(t *testing.T) {
+	// The production floor is a minute, which no test can wait out.
+	defer func(floor time.Duration) { MinimumRefresh = floor }(MinimumRefresh)
+	MinimumRefresh = 10 * time.Millisecond
+
 	// One job, never due, so the cycle runs its full length doing nothing.
 	cron, err := ParseCron("0 0 1 1 *")
 	if err != nil {
@@ -142,7 +154,7 @@ func TestAMissingRefreshDoesNotBecomeABusyLoop(t *testing.T) {
 
 	supervise(ctx, quietLogger(), shellRunner(0), LoadState(""), fetcher.fetch)
 
-	// Prepare() turns 0 into the 600 second default, so one fetch and a wait.
+	// RefreshPeriod turns 0 into the half-hour default, so one fetch and a wait.
 	if calls := fetcher.count(); calls != 1 {
 		t.Errorf("fetched %d times, want 1: a zero refresh was taken literally", calls)
 	}
