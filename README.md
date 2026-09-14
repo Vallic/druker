@@ -237,8 +237,27 @@ ever sees it. `drush druker:check` says which jobs are being withheld and why,
 because a job that silently does not run is the worst way to find out.
 
 **No job ever overlaps itself.** A job still running when its next turn comes
-round is skipped, with a warning. Two copies of a queue processor is how a
-queue gets worked twice and a mail gets sent twice.
+round is skipped for that turn, with a warning in the log.
+
+The failure this prevents is rarely the one people expect. It is a job that
+takes seven minutes on a five-minute schedule, quietly accumulating another
+copy every five minutes until the machine runs out of memory or database
+connections — silent until it is not.
+
+After that it is the jobs that are *not* queue processors. A command that
+emails everyone who abandoned a cart in the last hour has no idea another copy
+of itself is making the same selection, and the customer gets the mail twice.
+The same goes for an import, a report, or anything that tags the rows it finds.
+
+Queue processors are the safest case rather than the worst. Advanced Queue and
+core's queue both lease the items they hand out, so two processors normally
+take different work — which is why running one queue on several servers is
+throughput and not duplication. What overlap costs you there is narrower: a
+lease expiring while the first copy is still mid-item, after which a second can
+claim it and do it again.
+
+The guard is per job, per server. The same job assigned to three servers still
+runs on all three at once; that is what assigning it to three is for.
 
 ## Adding jobs from code
 

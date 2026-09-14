@@ -42,9 +42,15 @@ func NewRunner(drush string, dir string, logger *slog.Logger, timeout time.Durat
 
 // Start begins a job, unless it is already running.
 //
-// A job that is still going when its next tick arrives is skipped rather than
-// started alongside itself. Two copies of a queue processor is how a queue
-// gets worked twice and a mail gets sent twice.
+// A job still going when its next tick arrives is skipped rather than started
+// alongside itself. Mostly this stops a job that outlives its own interval
+// from accumulating copies until the machine falls over, and stops a job with
+// no claim semantics of its own — an import, a report, anything that emails
+// what it finds — from doing the same work twice.
+//
+// Queue processors are the case that needs it least: they lease their items,
+// so two copies normally take different work. Keyed by job ID, so the same
+// job on another server is another process and runs regardless.
 func (r *Runner) Start(ctx context.Context, job Job, onFinish func()) bool {
 	done, started := r.claim(job.ID)
 

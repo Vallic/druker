@@ -49,7 +49,7 @@ func TestRunsAJobToCompletion(t *testing.T) {
 	}
 }
 
-// Two copies of a queue processor is how a queue gets worked twice.
+// A job that outlives its own interval must not accumulate copies.
 func TestAJobDoesNotOverlapItself(t *testing.T) {
 	runner := shellRunner(0)
 	release := make(chan struct{})
