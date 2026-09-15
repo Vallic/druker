@@ -105,22 +105,23 @@ class CronJobListBuilder extends EntityListBuilder {
       ]);
     }
 
+    if (($every = $job->getTimingEvery()) !== NULL) {
+      if (!$this->jobManager->isValidInterval($every, $job->getTimingOffset())) {
+        return $this->unreadable((string) $this->t('Every @every seconds', ['@every' => $every]));
+      }
+
+      $offset = $job->getTimingOffset();
+
+      return $offset > 0
+        ? $this->t('Every @every seconds, offset @offset', ['@every' => $every, '@offset' => $offset])
+        : $this->t('Every @every seconds', ['@every' => $every]);
+    }
+
     $typed = $job->getTimingCron();
     $resolved = $this->jobManager->resolveCronExpression($typed);
 
     if (!$this->jobManager->isValidCronExpression($typed)) {
-      // Said plainly here rather than left for someone to notice in a log:
-      // the worker drops a job it cannot read, and it never runs.
-      return [
-        'data' => [
-          '#type' => 'inline_template',
-          '#template' => '<strong>{{ warning }}</strong><br><code>{{ typed }}</code>',
-          '#context' => [
-            'warning' => $this->t('Unreadable, so this never runs'),
-            'typed' => $typed,
-          ],
-        ],
-      ];
+      return $this->unreadable($typed);
     }
 
     if ($resolved === $typed) {
@@ -155,6 +156,25 @@ class CronJobListBuilder extends EntityListBuilder {
         '#type' => 'inline_template',
         '#template' => '<strong>{{ warning }}</strong>',
         '#context' => ['warning' => $this->t('Shell, not enabled here')],
+      ],
+    ];
+  }
+
+  /**
+   * A schedule the worker cannot read, said plainly.
+   *
+   * Rather than left for someone to notice in a log: the worker drops a job
+   * whose schedule it cannot read, and it simply never runs.
+   */
+  protected function unreadable(string $typed): array {
+    return [
+      'data' => [
+        '#type' => 'inline_template',
+        '#template' => '<strong>{{ warning }}</strong><br><code>{{ typed }}</code>',
+        '#context' => [
+          'warning' => $this->t('Unreadable, so this never runs'),
+          'typed' => $typed,
+        ],
       ],
     ];
   }

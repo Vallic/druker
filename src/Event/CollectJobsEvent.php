@@ -24,11 +24,10 @@ use Symfony\Contracts\EventDispatcher\Event;
  *   - offset: int seconds to shift those runs by (optional, type=interval)
  *
  * The interval type exists for the schedules cron cannot say: every 25
- * seconds, every 75, every 90. It has no form of its own and no stored
- * entity, because a period that is not expressible in cron is almost always
- * one a person did not choose by hand — it comes from a site that knows how
- * far behind a queue is, or how close an event is, and recomputes it. The
- * `offset` is what keeps the same job on three servers out of the same
+ * seconds, every 75, every 90. It can also be set on a stored job in the
+ * admin UI; what only a subscriber can do is change the period as the site
+ * runs, from what it knows about a queue's depth or how close an event is.
+ * The `offset` is what keeps the same job on three servers out of the same
  * second; boundaries are anchored to the epoch, so two servers given offsets
  * 0 and 4 stay four seconds apart across a restart of either.
  *

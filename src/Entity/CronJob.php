@@ -13,6 +13,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\druker\CronJobListBuilder;
+use Drupal\druker\Event\CollectJobsEvent;
 use Drupal\druker\Form\CronJobForm;
 
 /**
@@ -77,6 +78,36 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
   public function getTimingOnce(): ?int {
     $value = $this->get('timing_once')->value;
     return $value !== NULL ? (int) $value : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTimingEvery(): ?int {
+    $value = $this->get('timing_every')->value;
+    return $value !== NULL && $value !== '' ? (int) $value : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTimingOffset(): int {
+    return (int) ($this->get('timing_offset')->value ?? 0);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTimingType(): string {
+    if ($this->getTimingOnce() !== NULL) {
+      return CronJobInterface::TIMING_ONCE;
+    }
+
+    if ($this->getTimingEvery() !== NULL) {
+      return CronJobInterface::TIMING_INTERVAL;
+    }
+
+    return CronJobInterface::TIMING_CRON;
   }
 
   /**
@@ -148,14 +179,17 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
 
     $fields['timing_cron'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Cron expression'))
-      ->setDescription(t('Standard cron syntax ("0 2 * * *"), @-shortcut ("@daily"), or plain English ("every 5 minutes"). Leave empty for one-time jobs.'))
+      ->setDescription(t('Standard cron syntax ("0 2 * * *"), @-shortcut ("@daily"), or plain English ("every 5 minutes"). Leave empty for a one-time job, or one that repeats on a period cron cannot express.'))
       ->setSettings(['max_length' => 255])
       ->setDisplayOptions('form', ['type' => 'string_textfield', 'weight' => 5]);
 
     $fields['timing_once'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Run at'))
-      ->setDescription(t('Date and time to run this job once. Leave empty for recurring jobs.'))
+      ->setDescription(t('Date and time to run this job once. Leave empty for a recurring job.'))
       ->setDisplayOptions('form', ['type' => 'datetime_timestamp', 'weight' => 6]);
+
+    $fields['timing_every'] = self::timingEveryFieldDefinition();
+    $fields['timing_offset'] = self::timingOffsetFieldDefinition();
 
     $fields['server'] = self::serverFieldDefinition();
 
@@ -189,6 +223,31 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setSetting('target_type', 'druker_server')
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
       ->setDisplayOptions('form', ['type' => 'options_buttons', 'weight' => 10]);
+  }
+
+  /**
+   * The interval period field, also used by the update that adds it.
+   */
+  public static function timingEveryFieldDefinition(): BaseFieldDefinition {
+    return BaseFieldDefinition::create('integer')
+      ->setLabel(t('Repeat every'))
+      ->setDescription(t('Seconds between runs, for a period cron cannot say — every 30 seconds, every 75. Runs are anchored to the clock, so "every 30" means :00 and :30 of every minute on every server. Leave empty unless this is what you want; the shortest allowed is @minimum seconds.', ['@minimum' => CollectJobsEvent::MINIMUM_INTERVAL]))
+      ->setSetting('min', CollectJobsEvent::MINIMUM_INTERVAL)
+      ->setSetting('suffix', ' ' . t('seconds'))
+      ->setDisplayOptions('form', ['type' => 'number', 'weight' => 7]);
+  }
+
+  /**
+   * The interval offset field, also used by the update that adds it.
+   */
+  public static function timingOffsetFieldDefinition(): BaseFieldDefinition {
+    return BaseFieldDefinition::create('integer')
+      ->setLabel(t('Offset'))
+      ->setDescription(t('Seconds to shift those runs by. The same job given 0 on one server and 4 on another stays four seconds apart on the two, which is how one queue is processed by several machines without them all starting together. Only meaningful with a repeat period.'))
+      ->setSetting('min', 0)
+      ->setSetting('suffix', ' ' . t('seconds'))
+      ->setDefaultValue(0)
+      ->setDisplayOptions('form', ['type' => 'number', 'weight' => 8]);
   }
 
   /**

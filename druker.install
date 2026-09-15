@@ -77,3 +77,15 @@ function druker_update_11003(): string {
 
   return (string) t('@count servers had their enabled flag corrected.', ['@count' => $fixed]);
 }
+
+/**
+ * Adds the interval fields, so a period cron cannot say can be set in the UI.
+ */
+function druker_update_11004(): string {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+
+  $manager->installFieldStorageDefinition('timing_every', 'druker_job', 'druker', CronJob::timingEveryFieldDefinition());
+  $manager->installFieldStorageDefinition('timing_offset', 'druker_job', 'druker', CronJob::timingOffsetFieldDefinition());
+
+  return (string) t('Existing jobs are unchanged: a job with no period keeps the cron expression or run-at date it already had.');
+}

@@ -25,9 +25,33 @@ interface CronJobInterface extends ContentEntityInterface {
   public const RUNNER_SHELL = 'shell';
 
   /**
+   * Repeats on a cron expression.
+   */
+  public const TIMING_CRON = 'cron';
+
+  /**
+   * Runs at one moment and is then done with.
+   */
+  public const TIMING_ONCE = 'once';
+
+  /**
+   * Repeats every n seconds, for the periods cron cannot say.
+   */
+  public const TIMING_INTERVAL = 'interval';
+
+  /**
    * Which runner executes this job: one of the RUNNER_* constants.
    */
   public function getRunner(): string;
+
+  /**
+   * How this job says when it runs: one of the TIMING_* constants.
+   *
+   * Derived from which of the timing fields is filled in, so that the form,
+   * the payload, the list and the dashboard all decide it the same way and
+   * cannot disagree about what kind of job this is.
+   */
+  public function getTimingType(): string;
 
   /**
    * The Drush command to run, without the leading "drush".
@@ -43,6 +67,22 @@ interface CronJobInterface extends ContentEntityInterface {
    * When to run this once, as a timestamp, or NULL when it recurs.
    */
   public function getTimingOnce(): ?int;
+
+  /**
+   * Seconds between runs, or NULL when this is not an interval job.
+   *
+   * For the periods cron cannot say: every 30 seconds, every 75, every 90.
+   */
+  public function getTimingEvery(): ?int;
+
+  /**
+   * Seconds to shift an interval job's runs by.
+   *
+   * Boundaries are anchored to the epoch, so this is what keeps the same job
+   * on two servers out of the same second. Meaningless without a period, and
+   * zero when there is none.
+   */
+  public function getTimingOffset(): int;
 
   /**
    * The servers this job runs on.

@@ -287,6 +287,46 @@ class JobManagerTest extends UnitTestCase {
   }
 
   /**
+   * An interval job carries its period and offset instead.
+   */
+  public function testGetJobsForServerFormatsIntervalJob(): void {
+    $job = $this->makeCronJob(
+      id: 3,
+      label: 'Process the bid queue',
+      command: 'advancedqueue:queue:process bid_queue',
+      timingCron: '',
+      timingOnce: NULL,
+      async: TRUE,
+      dependsOn: NULL,
+      timingEvery: 25,
+      timingOffset: 4,
+    );
+
+    [$jobStorage, $serverStorage] = $this->buildStorageMocks(
+      serverHostname: 'web-01',
+      serverRefresh: 600,
+      jobs: [$job],
+    );
+
+    $this->entityTypeManager->method('getStorage')
+      ->willReturnMap([
+        ['druker_job', $jobStorage],
+        ['druker_server', $serverStorage],
+      ]);
+
+    $this->eventDispatcher->method('dispatch')
+      ->willReturnArgument(0);
+
+    $formatted = $this->manager->getJobsForServer('web-01')['jobs'][0];
+
+    $this->assertSame('interval', $formatted['type']);
+    $this->assertSame(25, $formatted['every']);
+    $this->assertSame(4, $formatted['offset']);
+    $this->assertArrayNotHasKey('cron', $formatted);
+    $this->assertArrayNotHasKey('run_at', $formatted);
+  }
+
+  /**
    * Other modules get their chance to add jobs.
    */
   public function testGetJobsForServerDispatchesEvent(): void {
@@ -404,6 +444,8 @@ class JobManagerTest extends UnitTestCase {
     bool $async,
     ?int $dependsOn,
     string $runner = CronJobInterface::RUNNER_DRUSH,
+    ?int $timingEvery = NULL,
+    int $timingOffset = 0,
   ): CronJobInterface {
     $job = $this->createMock(CronJobInterface::class);
     $job->method('id')->willReturn($id);
@@ -411,9 +453,20 @@ class JobManagerTest extends UnitTestCase {
     $job->method('getCommand')->willReturn($command);
     $job->method('getTimingCron')->willReturn($timingCron);
     $job->method('getTimingOnce')->willReturn($timingOnce);
+    $job->method('getTimingEvery')->willReturn($timingEvery);
+    $job->method('getTimingOffset')->willReturn($timingOffset);
     $job->method('isAsync')->willReturn($async);
     $job->method('getDependsOnId')->willReturn($dependsOn);
     $job->method('getRunner')->willReturn($runner);
+
+    // Derived the way CronJob derives it, so the double cannot claim to be a
+    // kind of job its own fields disagree with.
+    $job->method('getTimingType')->willReturn(match (TRUE) {
+      $timingOnce !== NULL => CronJobInterface::TIMING_ONCE,
+      $timingEvery !== NULL => CronJobInterface::TIMING_INTERVAL,
+      default => CronJobInterface::TIMING_CRON,
+    });
+
     return $job;
   }
 

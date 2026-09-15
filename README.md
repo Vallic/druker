@@ -218,6 +218,14 @@ files it creates are owned by them.
 
 ## Scheduling
 
+A job is one of three kinds, and the form asks which before it asks anything
+else — **Recurring**, **Interval** or **One-time**. Only the fields belonging
+to the kind you pick are shown, and only those are saved: the other two are
+cleared on the way in, so switching a job from one kind to another leaves
+nothing of the old schedule behind it. The same three names are what the
+payload calls them, so a job reads the same way in the UI, in
+`drush druker:jobs` and in the worker's log.
+
 **Recurring jobs** take standard five-field cron, an `@`-shortcut (`@daily`),
 or plain English (`every 5 minutes`). Whatever you type is resolved to cron by
 `JobManager::resolveCronExpression()` before it reaches the worker.
@@ -228,10 +236,11 @@ is one that never runs and never says why. `drush druker:check` runs the same
 test over everything at once.
 
 **Interval jobs** repeat every *n* seconds, and exist for the periods cron
-cannot say: every 25 seconds, every 75, every 90. They have no form of their
-own — a period cron cannot express is almost never one a person picked by
-hand, it comes from a site that knows how deep a queue is or how close an
-event is — so they arrive through `CollectJobsEvent` and nowhere else.
+cannot say: every 25 seconds, every 75, every 90. Queue processors are what
+they are mostly for — `* * * * *` is the finest cron can manage, and a queue
+that matters is usually worth draining more often than once a minute. Pick
+**Interval** on the job form, or add one from `CollectJobsEvent` when the
+period itself has to be computed.
 
 Boundaries are anchored to the epoch rather than to when the worker started,
 so a job set to every 30 seconds runs on :00 and :30 of every minute on every

@@ -138,16 +138,38 @@ class JobManager {
       'depends_on' => $job->getDependsOnId(),
     ];
 
-    if ($job->getTimingOnce() !== NULL) {
-      $result['type'] = 'once';
-      $result['run_at'] = $job->getTimingOnce();
-    }
-    else {
-      $result['type'] = 'cron';
-      $result['cron'] = $this->resolveCronExpression($job->getTimingCron());
+    $result['type'] = $job->getTimingType();
+
+    switch ($result['type']) {
+      case CronJobInterface::TIMING_ONCE:
+        $result['run_at'] = $job->getTimingOnce();
+        break;
+
+      case CronJobInterface::TIMING_INTERVAL:
+        $result['every'] = $job->getTimingEvery();
+        $result['offset'] = $job->getTimingOffset();
+        break;
+
+      default:
+        $result['cron'] = $this->resolveCronExpression($job->getTimingCron());
     }
 
     return $result;
+  }
+
+  /**
+   * Whether the worker will be able to read this job's schedule at all.
+   *
+   * One question asked in one place, because a job has three ways of saying
+   * when it runs and every caller that cares — the dashboard's warnings, the
+   * day grid, the list — has to agree about which of them this job used.
+   */
+  public function scheduleIsReadable(CronJobInterface $job): bool {
+    return match ($job->getTimingType()) {
+      CronJobInterface::TIMING_ONCE => TRUE,
+      CronJobInterface::TIMING_INTERVAL => $this->isValidInterval((int) $job->getTimingEvery(), $job->getTimingOffset()),
+      default => $this->isValidCronExpression($job->getTimingCron()),
+    };
   }
 
   /**

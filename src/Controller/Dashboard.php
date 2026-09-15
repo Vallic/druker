@@ -114,7 +114,7 @@ class Dashboard extends ControllerBase {
         continue;
       }
 
-      if ($job->getTimingOnce() === NULL && !$this->jobManager->isValidCronExpression($job->getTimingCron())) {
+      if (!$this->jobManager->scheduleIsReadable($job)) {
         $messages[] = $this->t('%job has a schedule the worker cannot read, so it never runs.', ['%job' => $label]);
       }
 
@@ -191,18 +191,29 @@ class Dashboard extends ControllerBase {
    * One job, reduced to what a card shows.
    */
   protected function jobSummary(CronJobInterface $job): array {
-    $once = $job->getTimingOnce();
-
     return [
       'label' => $job->label(),
       'command' => $job->getCommand(),
       'runner' => $job->getRunner(),
       'shared' => $job->getServerIds() === [],
-      'schedule' => $once !== NULL
-        ? $this->t('once')
-        : $this->jobManager->resolveCronExpression($job->getTimingCron()),
+      'schedule' => $this->summarySchedule($job),
       'url' => $job->toUrl('edit-form')->toString(),
     ];
+  }
+
+  /**
+   * What a card says about when a job runs.
+   */
+  protected function summarySchedule(CronJobInterface $job): string {
+    if ($job->getTimingOnce() !== NULL) {
+      return (string) $this->t('once');
+    }
+
+    if (($every = $job->getTimingEvery()) !== NULL) {
+      return (string) $this->t('every @every s', ['@every' => $every]);
+    }
+
+    return $this->jobManager->resolveCronExpression($job->getTimingCron());
   }
 
   /**
@@ -220,7 +231,11 @@ class Dashboard extends ControllerBase {
         continue;
       }
 
-      $hours = $this->jobManager->scheduleHours($job->getTimingCron());
+      // An interval job runs in every hour there is, which is exactly what
+      // the grid's "busy" row already draws.
+      $hours = $job->getTimingEvery() !== NULL
+        ? range(0, 23)
+        : $this->jobManager->scheduleHours($job->getTimingCron());
 
       if ($hours === []) {
         continue;
@@ -260,7 +275,7 @@ class Dashboard extends ControllerBase {
       return FALSE;
     }
 
-    if ($job->getTimingOnce() === NULL && !$this->jobManager->isValidCronExpression($job->getTimingCron())) {
+    if (!$this->jobManager->scheduleIsReadable($job)) {
       return FALSE;
     }
 
