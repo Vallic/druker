@@ -227,6 +227,21 @@ refuses an expression the worker could not read, because a job the worker drops
 is one that never runs and never says why. `drush druker:check` runs the same
 test over everything at once.
 
+**Interval jobs** repeat every *n* seconds, and exist for the periods cron
+cannot say: every 25 seconds, every 75, every 90. They have no form of their
+own — a period cron cannot express is almost never one a person picked by
+hand, it comes from a site that knows how deep a queue is or how close an
+event is — so they arrive through `CollectJobsEvent` and nowhere else.
+
+Boundaries are anchored to the epoch rather than to when the worker started,
+so a job set to every 30 seconds runs on :00 and :30 of every minute on every
+server, whatever time each of them booted, and a restart does not move it. An
+`offset` shifts those boundaries, which is how the same queue processor on
+three servers is kept out of the same second. A tick missed under load delays
+a run rather than losing it. The floor is **5 seconds**: the tick is one, but
+every run is a process and a Drupal bootstrap, and a job that outlives its own
+period is skipped rather than queued.
+
 **One-time jobs** take a date instead, and are remembered once run so a restart
 does not run them again. That memory is a small JSON file — if the worker runs
 in a container, point `-state` at a volume, or a one-time job will run again
@@ -308,6 +323,23 @@ public function onCollectJobs(CollectJobsEvent $event): void {
     'depends_on' => NULL,
   ]);
 }
+```
+
+An interval job is the same shape with `every` in place of `cron`, and an
+optional `offset`:
+
+```php
+$event->addJob([
+  'id' => 901,
+  'name' => 'Process the bid queue',
+  'command' => 'advancedqueue:queue:process bid_queue',
+  'runner' => 'drush',
+  'type' => 'interval',
+  'every' => 25,
+  'offset' => 4,
+  'async' => TRUE,
+  'depends_on' => NULL,
+]);
 ```
 
 The shape is the same one `formatJob()` produces. Anything the worker cannot

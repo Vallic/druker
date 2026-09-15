@@ -151,6 +151,17 @@ class JobManager {
   }
 
   /**
+   * Whether an interval the worker will accept.
+   *
+   * The same reasoning as isValidCronExpression(): the worker drops what it
+   * cannot use, and a dropped job is silent. Kept in step with Prepare() in
+   * worker/schedule.go.
+   */
+  public function isValidInterval(int $every, int $offset = 0): bool {
+    return $every >= CollectJobsEvent::MINIMUM_INTERVAL && $offset >= 0;
+  }
+
+  /**
    * Whether a value resolves to an expression the worker will accept.
    *
    * The worker parses cron itself and drops anything it cannot read, which is

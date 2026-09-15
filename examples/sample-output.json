@@ -71,6 +71,17 @@
       "depends_on": null,
       "type": "cron",
       "cron": "30 2 * * *"
+    },
+    {
+      "id": 8,
+      "name": "Process the bid queue during a live auction",
+      "command": "advancedqueue:queue:process bid_queue",
+      "runner": "drush",
+      "async": true,
+      "depends_on": null,
+      "type": "interval",
+      "every": 25,
+      "offset": 4
     }
   ]
 }

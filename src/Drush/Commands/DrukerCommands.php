@@ -7,6 +7,7 @@ namespace Drupal\druker\Drush\Commands;
 use Drupal\Component\Serialization\Json;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\druker\Entity\CronJobInterface;
+use Drupal\druker\Event\CollectJobsEvent;
 use Drupal\druker\JobManager;
 use Drush\Attributes as CLI;
 use Drush\Commands\AutowireTrait;
@@ -73,6 +74,17 @@ final class DrukerCommands extends DrushCommands {
       if (($job['type'] ?? '') === 'once') {
         if ((int) ($job['run_at'] ?? 0) <= 0) {
           $problems[] = dt('@job runs once but has no time set.', ['@job' => $label]);
+        }
+        continue;
+      }
+
+      if (($job['type'] ?? '') === 'interval') {
+        if (!$this->jobManager->isValidInterval((int) ($job['every'] ?? 0), (int) ($job['offset'] ?? 0))) {
+          $problems[] = dt('@job repeats every @every seconds, which the worker will not run. The shortest allowed is @minimum, and the offset cannot be negative.', [
+            '@job' => $label,
+            '@every' => $job['every'] ?? 0,
+            '@minimum' => CollectJobsEvent::MINIMUM_INTERVAL,
+          ]);
         }
         continue;
       }

@@ -179,6 +179,17 @@ func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State,
 
 	lastMinute := -1
 
+	// The boundary each interval job last started at. Seeded with the current
+	// one so that reloading the schedule is not itself an event: without this
+	// every interval job would be due on the first tick of every cycle, and a
+	// short refresh would turn a 10-minute job into a 10-minute-or-sooner one.
+	lastFired := make(map[int]int64, len(schedule.Jobs))
+	for _, job := range schedule.Jobs {
+		if job.Type == typeInterval {
+			lastFired[job.ID] = job.IntervalBoundary(time.Now())
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -189,7 +200,7 @@ func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State,
 			newMinute := minute != lastMinute
 			lastMinute = minute
 
-			due := dueJobs(schedule, state, runner, now, newMinute)
+			due := dueJobs(schedule, state, runner, lastFired, now, newMinute)
 
 			if newMinute {
 				// The line to turn on when the question is "why did my job
@@ -210,12 +221,24 @@ func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State,
 }
 
 // dueJobs is everything that should start now.
-func dueJobs(schedule *Schedule, state *State, runner *Runner, now time.Time, newMinute bool) []Job {
+//
+// lastFired is read and written here rather than inside Job, because a Job is
+// copied out of the schedule by value on every pass and anything recorded on
+// the copy would be thrown away with it.
+func dueJobs(schedule *Schedule, state *State, runner *Runner, lastFired map[int]int64, now time.Time, newMinute bool) []Job {
 	var due []Job
 
 	for _, job := range schedule.Jobs {
 		switch {
 		case job.Type == typeCron && newMinute && job.Due(now):
+			due = append(due, job)
+
+		case job.Type == typeInterval && job.DueInterval(now, lastFired[job.ID]):
+			// Recorded on being offered, not on starting. A job still running
+			// from its last turn is refused by the runner, with a warning;
+			// leaving the boundary unrecorded would re-offer it every second
+			// until it finished, and bury that warning under its repeats.
+			lastFired[job.ID] = job.IntervalBoundary(now)
 			due = append(due, job)
 
 		case job.Type == typeOnce && job.DueOnce(now) && !state.Completed(job.ID):
@@ -297,8 +320,16 @@ func dryRunSchedule(drush, host string, logger *slog.Logger) int {
 
 	for _, job := range schedule.Jobs {
 		when := job.Cron
-		if job.Type == typeOnce {
+
+		switch job.Type {
+		case typeOnce:
 			when = "once at " + time.Unix(job.RunAt, 0).Format(time.RFC3339)
+
+		case typeInterval:
+			when = fmt.Sprintf("every %ds", job.Every)
+			if job.Offset > 0 {
+				when = fmt.Sprintf("every %ds +%ds", job.Every, job.Offset)
+			}
 		}
 
 		fmt.Printf("  %-*s  %-18s %s\n", width, job.Label(), when, job.Command)

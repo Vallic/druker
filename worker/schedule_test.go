@@ -32,8 +32,14 @@ func TestParsesTheDrupalSample(t *testing.T) {
 		t.Errorf("refresh: got %d", schedule.Refresh)
 	}
 
-	if len(schedule.Jobs) != 7 {
-		t.Fatalf("jobs: got %d, want 7", len(schedule.Jobs))
+	if len(schedule.Jobs) != 8 {
+		t.Fatalf("jobs: got %d, want 8", len(schedule.Jobs))
+	}
+
+	interval := schedule.Jobs[7]
+
+	if interval.Type != typeInterval || interval.Every != 25 || interval.Offset != 4 {
+		t.Errorf("interval job: got type %q every %d offset %d", interval.Type, interval.Every, interval.Offset)
 	}
 
 	first := schedule.Jobs[0]
@@ -234,5 +240,65 @@ func TestRefreshPeriod(t *testing.T) {
 		if got := schedule.RefreshPeriod(); got != c.want {
 			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
 		}
+	}
+}
+
+// Boundaries are anchored to the epoch rather than to the worker's start, so
+// the same job lands on the same seconds on every server however each booted.
+func TestIntervalBoundariesAreAbsolute(t *testing.T) {
+	job := Job{Type: typeInterval, Every: 30}
+
+	for _, when := range []int64{1200, 1210, 1229} {
+		if got := job.IntervalBoundary(time.Unix(when, 0)); got != 1200 {
+			t.Errorf("at %d expected boundary 1200, got %d", when, got)
+		}
+	}
+
+	if got := job.IntervalBoundary(time.Unix(1230, 0)); got != 1230 {
+		t.Errorf("expected the next boundary at 1230, got %d", got)
+	}
+}
+
+// Offset is what keeps the same queue processor on three servers out of the
+// same second, so it has to move the boundaries rather than the first run.
+func TestOffsetShiftsTheBoundaries(t *testing.T) {
+	job := Job{Type: typeInterval, Every: 30, Offset: 4}
+
+	if got := job.IntervalBoundary(time.Unix(1233, 0)); got != 1204 {
+		t.Errorf("expected boundary 1204, got %d", got)
+	}
+
+	if got := job.IntervalBoundary(time.Unix(1234, 0)); got != 1234 {
+		t.Errorf("expected boundary 1234, got %d", got)
+	}
+
+	// An offset longer than the period is the same as its remainder, rather
+	// than a job that is never due.
+	long := Job{Type: typeInterval, Every: 30, Offset: 64}
+	if long.IntervalBoundary(time.Unix(1234, 0)) != job.IntervalBoundary(time.Unix(1234, 0)) {
+		t.Error("an offset beyond the period should wrap")
+	}
+}
+
+// An interval the worker cannot honour is dropped with a reason, the way an
+// unreadable cron expression is, rather than failing the whole schedule.
+func TestPrepareRejectsUnusableIntervals(t *testing.T) {
+	schedule := &Schedule{
+		Refresh: 60,
+		Jobs: []Job{
+			{ID: 1, Name: "too often", Command: "cron", Runner: runnerDrush, Type: typeInterval, Every: 1},
+			{ID: 2, Name: "negative offset", Command: "cron", Runner: runnerDrush, Type: typeInterval, Every: 30, Offset: -1},
+			{ID: 3, Name: "fine", Command: "cron", Runner: runnerDrush, Type: typeInterval, Every: 30},
+		},
+	}
+
+	problems := schedule.Prepare()
+
+	if len(problems) != 2 {
+		t.Fatalf("expected two problems, got %d: %v", len(problems), problems)
+	}
+
+	if len(schedule.Jobs) != 1 || schedule.Jobs[0].ID != 3 {
+		t.Errorf("expected only the usable job to survive, got %v", schedule.Jobs)
 	}
 }

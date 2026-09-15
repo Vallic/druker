@@ -17,9 +17,20 @@ use Symfony\Contracts\EventDispatcher\Event;
  *   - name: string
  *   - command: string (drush command, or a command line when runner is shell)
  *   - runner: 'drush' or 'shell'
- *   - type: 'cron' or 'once'
+ *   - type: 'cron', 'once' or 'interval'
  *   - cron: string cron expression (when type=cron)
  *   - run_at: int unix timestamp (when type=once)
+ *   - every: int seconds between runs (when type=interval)
+ *   - offset: int seconds to shift those runs by (optional, type=interval)
+ *
+ * The interval type exists for the schedules cron cannot say: every 25
+ * seconds, every 75, every 90. It has no form of its own and no stored
+ * entity, because a period that is not expressible in cron is almost always
+ * one a person did not choose by hand — it comes from a site that knows how
+ * far behind a queue is, or how close an event is, and recomputes it. The
+ * `offset` is what keeps the same job on three servers out of the same
+ * second; boundaries are anchored to the epoch, so two servers given offsets
+ * 0 and 4 stay four seconds apart across a restart of either.
  *
  * A subscriber can also change how often this server comes back for its
  * schedule, with setRefresh(). The server's own setting is the starting
@@ -46,6 +57,17 @@ class CollectJobsEvent extends Event {
    * a deploy, and rare enough that the asking costs nothing.
    */
   public const DEFAULT_REFRESH = 1800;
+
+  /**
+   * The shortest period an interval job may repeat at.
+   *
+   * The worker's tick is a second, so the mechanism would allow one. Every
+   * run is a process and a full Drupal bootstrap, though, and a job still
+   * running when its next turn comes is skipped — so anything under this is
+   * a job that mostly reports being skipped. Mirrors MinimumInterval in
+   * worker/schedule.go.
+   */
+  public const MINIMUM_INTERVAL = 5;
 
   public function __construct(
     private readonly string $hostname,

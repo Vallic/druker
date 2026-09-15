@@ -22,6 +22,8 @@ type Job struct {
 	Type      string `json:"type"`
 	Cron      string `json:"cron"`
 	RunAt     int64  `json:"run_at"`
+	Every     int    `json:"every"`
+	Offset    int    `json:"offset"`
 
 	// Filled in by Prepare, not by Drupal.
 	schedule *CronSchedule
@@ -50,9 +52,19 @@ const (
 // loop can shorten it; nothing at runtime writes to it.
 var MinimumRefresh = time.Minute
 
+// MinimumInterval is the shortest period an interval job may repeat at.
+//
+// The tick is a second, so the mechanism would allow one. Every run is a
+// process and a full Drupal bootstrap, though, and a job that takes longer
+// than its own interval is skipped rather than queued — so anything under
+// this is a job that mostly reports being skipped. Drupal validates against
+// the same floor, in CollectJobsEvent::MINIMUM_INTERVAL.
+const MinimumInterval = 5
+
 const (
-	typeCron = "cron"
-	typeOnce = "once"
+	typeCron     = "cron"
+	typeOnce     = "once"
+	typeInterval = "interval"
 
 	// runnerDrush passes the command to Drush as arguments.
 	runnerDrush = "drush"
@@ -81,6 +93,52 @@ func (j *Job) Due(t time.Time) bool {
 // DueOnce reports whether a one-time job has reached its moment.
 func (j *Job) DueOnce(t time.Time) bool {
 	return j.Type == typeOnce && j.RunAt > 0 && t.Unix() >= j.RunAt
+}
+
+// DueInterval reports whether an interval job has reached a new boundary
+// since it last started, where last is the boundary it started at.
+//
+// Not "has `every` seconds passed since the last run": that measures from
+// whenever the job happened to start, so a worker restart moves every job's
+// schedule, and two servers running the same job drift into each other rather
+// than staying apart. Boundaries are absolute instead — see IntervalBoundary
+// — which keeps a job on the same seconds across a restart and makes Offset
+// mean something between servers.
+//
+// A tick the worker misses under load does not lose the run. The boundary it
+// belonged to is still newer than the last one recorded, so the job starts on
+// the next tick, late rather than skipped.
+func (j *Job) DueInterval(t time.Time, last int64) bool {
+	if j.Type != typeInterval || j.Every <= 0 {
+		return false
+	}
+
+	return j.IntervalBoundary(t) > last
+}
+
+// IntervalBoundary is the most recent moment this job was due, at or before t.
+//
+// Anchored to the Unix epoch rather than to the worker's start, so a job that
+// repeats every 30 seconds runs at :00 and :30 of every minute on every
+// server, whenever each of them happened to boot. Offset shifts those
+// boundaries forward, which is how the same queue processor on three servers
+// is kept from starting in the same second on all three.
+func (j *Job) IntervalBoundary(t time.Time) int64 {
+	every := int64(j.Every)
+
+	if every <= 0 {
+		return 0
+	}
+
+	now := t.Unix()
+	offset := int64(j.Offset) % every
+
+	// Go's % takes the sign of the dividend. A clock before the epoch is not
+	// a real case, but a negative remainder here would put the boundary in
+	// the future and the job would never be due again.
+	remainder := ((now-offset)%every + every) % every
+
+	return now - remainder
 }
 
 // Prepare validates the payload and parses the cron expressions in it.
@@ -120,6 +178,17 @@ func (s *Schedule) Prepare() []error {
 		case typeOnce:
 			if job.RunAt <= 0 {
 				problems = append(problems, fmt.Errorf("job %s is a one-time job with no run_at", job.Label()))
+				continue
+			}
+
+		case typeInterval:
+			if job.Every < MinimumInterval {
+				problems = append(problems, fmt.Errorf("job %s repeats every %ds, and the shortest allowed is %ds", job.Label(), job.Every, MinimumInterval))
+				continue
+			}
+
+			if job.Offset < 0 {
+				problems = append(problems, fmt.Errorf("job %s has a negative offset of %ds", job.Label(), job.Offset))
 				continue
 			}
 
