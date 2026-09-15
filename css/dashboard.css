@@ -186,6 +186,26 @@
   background: #a3bdf5;
 }
 
+/* An interval job runs continuously rather than once in each hour, so its
+   row is drawn as one unbroken band: the hour boundaries are not events for
+   it, and squaring off each cell would suggest they were. */
+.druker-day__cell.is-on.is-interval {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    #a3bdf5,
+    #a3bdf5 3px,
+    #c3d4f8 3px,
+    #c3d4f8 6px
+  );
+}
+
+.druker-day__every {
+  margin-left: 0.35rem;
+  color: #55565b;
+  font-size: 0.75rem;
+}
+
 .druker-day__note {
   margin-top: 0.75rem;
   color: #55565b;

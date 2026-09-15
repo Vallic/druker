@@ -72,11 +72,13 @@ class Dashboard extends ControllerBase {
   protected function summary(array $servers, array $jobs): array {
     $enabled = array_filter($jobs, static fn(CronJobInterface $job): bool => (bool) $job->get('status')->value);
     $shell = array_filter($enabled, static fn(CronJobInterface $job): bool => $job->getRunner() === CronJobInterface::RUNNER_SHELL);
-    $once = array_filter($enabled, static fn(CronJobInterface $job): bool => $job->getTimingOnce() !== NULL);
+    $once = array_filter($enabled, static fn(CronJobInterface $job): bool => $job->getTimingType() === CronJobInterface::TIMING_ONCE);
+    $interval = array_filter($enabled, static fn(CronJobInterface $job): bool => $job->getTimingType() === CronJobInterface::TIMING_INTERVAL);
 
     $items = [
       ['label' => $this->t('Servers'), 'value' => count($servers)],
       ['label' => $this->t('Enabled jobs'), 'value' => count($enabled)],
+      ['label' => $this->t('Interval jobs'), 'value' => count($interval)],
       ['label' => $this->t('One-time jobs'), 'value' => count($once)],
       ['label' => $this->t('Shell jobs'), 'value' => count($shell)],
     ];
@@ -205,12 +207,19 @@ class Dashboard extends ControllerBase {
    * What a card says about when a job runs.
    */
   protected function summarySchedule(CronJobInterface $job): string {
-    if ($job->getTimingOnce() !== NULL) {
+    if ($job->getTimingType() === CronJobInterface::TIMING_ONCE) {
       return (string) $this->t('once');
     }
 
-    if (($every = $job->getTimingEvery()) !== NULL) {
-      return (string) $this->t('every @every s', ['@every' => $every]);
+    if ($job->getTimingType() === CronJobInterface::TIMING_INTERVAL) {
+      $offset = $job->getTimingOffset();
+
+      // The offset is on the card because it is the whole reason the same
+      // job is on two servers at once without them colliding — reading one
+      // card and not seeing it would make the pair look identical.
+      return (string) ($offset > 0
+        ? $this->t('every @every s +@offset', ['@every' => $job->getTimingEvery(), '@offset' => $offset])
+        : $this->t('every @every s', ['@every' => $job->getTimingEvery()]));
     }
 
     return $this->jobManager->resolveCronExpression($job->getTimingCron());
@@ -227,13 +236,18 @@ class Dashboard extends ControllerBase {
 
       // Only what will actually happen. A job the warnings above say never
       // runs has no business being drawn onto the day as though it does.
-      if (!$this->willRun($job, $servers) || $job->getTimingOnce() !== NULL) {
+      if (!$this->willRun($job, $servers) || $job->getTimingType() === CronJobInterface::TIMING_ONCE) {
         continue;
       }
 
-      // An interval job runs in every hour there is, which is exactly what
-      // the grid's "busy" row already draws.
-      $hours = $job->getTimingEvery() !== NULL
+      $interval = $job->getTimingType() === CronJobInterface::TIMING_INTERVAL;
+
+      // An interval job runs in every hour there is. Filling all twenty-four
+      // is true but not enough on its own: an hourly cron job fills them too,
+      // and the two are three orders of magnitude apart in how often they
+      // run. So the row carries the period as well, and is drawn as a
+      // continuous band rather than as twenty-four separate hits.
+      $hours = $interval
         ? range(0, 23)
         : $this->jobManager->scheduleHours($job->getTimingCron());
 
@@ -246,6 +260,8 @@ class Dashboard extends ControllerBase {
         'url' => $job->toUrl('edit-form')->toString(),
         'hours' => $hours,
         'busy' => count($hours) === 24,
+        'interval' => $interval,
+        'every' => $interval ? $job->getTimingEvery() : NULL,
       ];
     }
 

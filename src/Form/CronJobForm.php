@@ -118,6 +118,22 @@ class CronJobForm extends ContentEntityForm {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function save(array $form, FormStateInterface $form_state): int {
+    $result = parent::save($form, $form_state);
+
+    // ContentEntityForm sends you to the entity's canonical route, which for
+    // a job is a page with nothing on it: there is no view display, so it
+    // renders the label and stops. The list is where the job you just saved
+    // is actually shown — beside the others, with the schedule resolved —
+    // and it is where the server form already lands.
+    $form_state->setRedirectUrl($this->entity->toUrl('collection'));
+
+    return $result;
+  }
+
+  /**
    * Whether the run-at field actually holds a date the person entered.
    *
    * The widget hands back a DrupalDateTime once it has parsed one, and the

@@ -89,6 +89,23 @@ class CronJobFormTest extends BrowserTestBase {
   }
 
   /**
+   * Saving goes back to the list, not to the job's own page.
+   *
+   * A job has no view display, so its canonical route renders the label and
+   * nothing else — landing there after a save looks like something went
+   * wrong. The server form already returns to its list.
+   */
+  public function testSavingReturnsToTheList(): void {
+    $this->submitJob([
+      'timing_type' => CronJobInterface::TIMING_INTERVAL,
+      'timing_every[0][value]' => '30',
+    ]);
+
+    $this->assertSession()->addressEquals('admin/config/system/druker/jobs');
+    $this->assertSession()->pageTextContains('Every 30 seconds');
+  }
+
+  /**
    * Each kind's fields are wired to the choice, so only one set is shown.
    */
   public function testTheFieldsFollowTheChoice(): void {

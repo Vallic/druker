@@ -16,13 +16,18 @@
     {% for row in rows %}
       <div class="druker-day__label">
         <a href="{{ row.url }}">{{ row.label }}</a>
+        {% if row.interval %}
+          {# An hourly cron job fills the day too. The period is what says
+             this one runs thousands of times rather than twenty-four. #}
+          <span class="druker-day__every">{{ 'every @every s'|t({'@every': row.every}) }}</span>
+        {% endif %}
       </div>
       {% for hour in hours %}
-        <div class="druker-day__cell{{ hour in row.hours ? ' is-on' : '' }}{{ row.busy ? ' is-busy' : '' }}"
-             title="{{ row.label }}{% if hour in row.hours %} — {{ hour }}:00{% endif %}"></div>
+        <div class="druker-day__cell{{ hour in row.hours ? ' is-on' : '' }}{{ row.busy ? ' is-busy' : '' }}{{ row.interval ? ' is-interval' : '' }}"
+             title="{{ row.label }}{% if row.interval %} — {{ 'every @every s, all day'|t({'@every': row.every}) }}{% elseif hour in row.hours %} — {{ hour }}:00{% endif %}"></div>
       {% endfor %}
     {% endfor %}
   </div>
 
-  <p class="druker-day__note">{{ 'One-time jobs are not shown; they have a date rather than a shape.'|t }}</p>
+  <p class="druker-day__note">{{ 'One-time jobs are not shown; they have a date rather than a shape. An interval job fills the day because it runs in every hour of it.'|t }}</p>
 </div>
