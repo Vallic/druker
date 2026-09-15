@@ -97,10 +97,11 @@ final class DrukerCommands extends DrushCommands {
       }
     }
 
-    // A withheld job is not an error — the site is configured that way on
+    // Neither of these is an error — the site is configured that way on
     // purpose — but silence here is how someone spends an afternoon wondering
     // why the job they created never runs.
     $this->reportWithheldShellJobs();
+    $this->reportStrandedJobs();
 
     if ($problems !== []) {
       foreach ($problems as $problem) {
@@ -115,6 +116,38 @@ final class DrukerCommands extends DrushCommands {
     ]));
 
     return self::EXIT_SUCCESS;
+  }
+
+  /**
+   * Says so when a job names only servers that are missing or disabled.
+   *
+   * This one cannot be found by reading a payload, which is why it was missed
+   * before: a stranded job is in no server's schedule at all, so checking one
+   * hostname reports a clean bill of health while the job never runs. The
+   * whole set has to be looked at from outside.
+   */
+  private function reportStrandedJobs(): void {
+    $servers = $this->entityTypeManager->getStorage('druker_server')->loadMultiple();
+    $stranded = [];
+
+    foreach ($this->entityTypeManager->getStorage('druker_job')->loadMultiple() as $job) {
+      if (!$job instanceof CronJobInterface || !$job->get('status')->value) {
+        continue;
+      }
+
+      if ($this->jobManager->isStranded($job, $servers)) {
+        $stranded[] = (string) $job->label();
+      }
+    }
+
+    if ($stranded === []) {
+      return;
+    }
+
+    $this->logger()->warning(dt('@count enabled jobs name only servers that are missing or disabled, so no worker runs them: @jobs. Enable one of the servers they name, or clear the assignment to run them everywhere.', [
+      '@count' => count($stranded),
+      '@jobs' => implode(', ', $stranded),
+    ]));
   }
 
   /**

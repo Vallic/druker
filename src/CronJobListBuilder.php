@@ -11,6 +11,7 @@ use Drupal\Core\Entity\EntityListBuilder;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\Core\Url;
 use Drupal\druker\Entity\CronJobInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -237,6 +238,21 @@ class CronJobListBuilder extends EntityListBuilder {
     // The canonical page for a job says nothing the list does not, and an
     // editor clicking the name expects the form.
     unset($operations['view']);
+
+    assert($entity instanceof CronJobInterface);
+    $enabled = (bool) $entity->get('status')->value;
+
+    // Ahead of Delete, because switching a job off is what people actually
+    // want when they reach for Delete and what they should reach for first.
+    $operations['toggle'] = [
+      'title' => $enabled ? $this->t('Disable') : $this->t('Enable'),
+      'weight' => 20,
+      'url' => Url::fromRoute('druker.job_toggle', ['druker_job' => $entity->id()]),
+    ];
+
+    if (isset($operations['delete'])) {
+      $operations['delete']['weight'] = 30;
+    }
 
     return $operations;
   }

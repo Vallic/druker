@@ -121,9 +121,9 @@ class Dashboard extends ControllerBase {
       }
 
       $named = $job->getServerIds();
-      $reachable = array_filter($named, static fn(string $id): bool => isset($servers[$id]) && $servers[$id]->status());
+      $reachable = $this->jobManager->reachableServerIds($job, $servers);
 
-      if ($named !== [] && $reachable === []) {
+      if ($this->jobManager->isStranded($job, $servers)) {
         $messages[] = $this->t('%job names only servers that are missing or disabled, so nothing picks it up.', ['%job' => $label]);
       }
       elseif (count($reachable) < count($named)) {
@@ -173,13 +173,18 @@ class Dashboard extends ControllerBase {
       // be showing work that is not happening.
       $will_run = $server->status() ? $own + $shared : $shared;
 
+      // Only the ones no other server is left to run. A job assigned to this
+      // server and to a live one is still being run, and counting it here
+      // contradicted the warning saying so directly above this card.
+      $stranded = array_filter($own, fn(CronJobInterface $job): bool => $this->jobManager->isStranded($job, $servers));
+
       $build[$id] = [
         '#theme' => 'druker_server_card',
         '#server' => $server,
         '#hostname' => $server->getHostname(),
         '#refresh' => $server->getDefaultRefresh(),
         '#enabled' => $server->status(),
-        '#stranded' => $server->status() ? 0 : count($own),
+        '#stranded' => $server->status() ? 0 : count($stranded),
         '#edit_url' => $server->toUrl('edit-form')->toString(),
         '#jobs' => array_map(fn(CronJobInterface $job): array => $this->jobSummary($job), $will_run),
         '#shared_count' => count($shared),

@@ -93,6 +93,43 @@ class DashboardTest extends BrowserTestBase {
   }
 
   /**
+   * A disabled server counts only the jobs nothing else is left to run.
+   *
+   * The card used to count every job naming the server, so a job assigned to
+   * this one and to a live one was reported as abandoned on the card while
+   * the warning directly above it said the opposite.
+   */
+  public function testTheCardCountsOnlyTrulyStrandedJobs(): void {
+    Server::create([
+      'id' => 'spare',
+      'label' => 'Spare',
+      'hostname' => 'spare-box',
+      'status' => FALSE,
+    ])->save();
+
+    $defaults = [
+      'status' => TRUE,
+      'runner' => CronJobInterface::RUNNER_DRUSH,
+      'async' => TRUE,
+      'timing_cron' => '0 3 * * *',
+    ];
+
+    // Named only by the disabled server: nothing runs it.
+    CronJob::create(['label' => 'Orphan', 'command' => 'cron', 'server' => ['spare']] + $defaults)->save();
+    // Named by the disabled server and a live one: still runs.
+    CronJob::create(['label' => 'Covered', 'command' => 'cron', 'server' => ['spare', 'box_a']] + $defaults)->save();
+
+    $this->drupalGet('admin/config/system/druker');
+
+    $this->assertSession()->elementTextContains('css', '.druker-card__stranded', 'one job it names is left with nobody to run it');
+    $this->assertSession()->elementTextNotContains('css', '.druker-card__stranded', '2 jobs');
+
+    // And the warnings say the same two things, which is the point.
+    $this->assertSession()->pageTextContains('Orphan names only servers that are missing or disabled');
+    $this->assertSession()->pageTextContains('Covered names a server that is missing or disabled. The others still run it.');
+  }
+
+  /**
    * A one-time job has a date rather than a shape, so it is left out.
    */
   public function testOneTimeJobsAreNotDrawn(): void {

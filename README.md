@@ -49,6 +49,11 @@ tabs: **Dashboard**, **Cron Jobs** and **Servers**.
    be editing the schedule. It is a restricted permission: a job is a command
    line that runs as the web user.
 
+Jobs can be switched off without being deleted, from the `Disable` operation
+on the job list. A disabled job keeps its command, schedule and server
+assignment, and no worker is told about it until it is enabled again. For
+differences between environments, see [Several environments](#several-environments).
+
 ### The Dashboard
 
 It answers the question the two lists cannot: what is each machine actually
@@ -70,6 +75,9 @@ nobody.
 
 Check the same things from a terminal with `drush druker:check`, which tests
 every job the way the worker will and exits non-zero if any would be dropped.
+It also warns about the two that are nobody's fault and easy to miss: a shell
+job on a site that has not opted in, and a job left naming only servers that
+are missing or disabled, which no worker anywhere is running.
 
 
 ## The two halves
@@ -313,6 +321,118 @@ claim it and do it again.
 
 The guard is per job, per server. The same job assigned to three servers still
 runs on all three at once; that is what assigning it to three is for.
+
+## Several environments
+
+Servers are config and jobs are content, and that split is what makes one
+schedule work across production, staging and a laptop.
+
+A **Server** is a config entity, so it is exported to `config/sync` and
+deployed everywhere — and, being config, its `hostname` and `status` can be
+overridden per environment in `settings.php`. A **Cron Job** is a content
+entity, living in each environment's database. A job assignment made by hand
+on a laptop is gone the next time that database is replaced by a copy of
+production, which is why per-environment differences belong on the servers
+rather than on the jobs.
+
+### One box standing in for several
+
+The usual shape: production splits the work across three machines, and every
+other environment runs the lot on one. Add a fourth server for that one, and
+have each job name **its production worker and the fallback** — the `Servers`
+field takes as many as you like:
+
+| Job | Servers |
+|---|---|
+| Live bid queue | `worker_1`, `fallback` |
+| Pre-auction lots | `worker_2`, `fallback` |
+| Mail and marketing | `worker_3`, `fallback` |
+| Drupal cron | *none — runs on every server* |
+
+Then let each environment say which of the two is real. On production,
+nothing: the three workers are enabled as stored, and `fallback` is switched
+off.
+
+```php
+// settings.php, production.
+$config['druker.server.fallback']['status'] = FALSE;
+```
+
+Everywhere else, the opposite:
+
+```php
+// settings.local.php, or the staging environment's settings.
+$config['druker.server.worker_1']['status'] = FALSE;
+$config['druker.server.worker_2']['status'] = FALSE;
+$config['druker.server.worker_3']['status'] = FALSE;
+```
+
+Exactly one of the two servers a job names is live in any given environment,
+so production splits the work three ways and everywhere else takes all of it:
+
+```
+production        prod-1     Drupal cron, Live bid queue
+                  prod-2     Drupal cron, Pre-auction lots
+                  prod-3     Drupal cron, Mail and marketing
+
+everywhere else   local-box  Drupal cron, Live bid queue,
+                             Pre-auction lots, Mail and marketing
+```
+
+Give `fallback` a hostname the local machine actually reports. In a container
+that is usually the container's own name rather than anything memorable, and
+the worker uses `os.Hostname()` — `drush druker:jobs` with no argument prints
+what it believes this machine is called.
+
+### Standing in for one machine rather than all of them
+
+To have a staging box behave as one particular production worker, override
+that worker's hostname instead of its status:
+
+```php
+$config['druker.server.worker_2']['hostname'] = 'staging-box';
+```
+
+That machine now gets exactly `worker_2`'s schedule. Only one server can be
+mapped this way per environment — a hostname resolves to a single server — so
+for all three at once, either use the fallback above, or run three workers on
+the one box with `-host`:
+
+```bash
+./druker -host worker-1 -state /var/lib/druker/worker-1.json &
+./druker -host worker-2 -state /var/lib/druker/worker-2.json &
+./druker -host worker-3 -state /var/lib/druker/worker-3.json &
+```
+
+Give each its own `-state`. One-time completions are recorded by job id, and a
+shared file would let one worker mark another's job as already done.
+
+### What the flags actually mean
+
+**Disabling a server** does not move its jobs anywhere. It stops that server
+being matched by hostname, so its machine falls through to the jobs that name
+no server at all. A job left naming only disabled or missing servers runs
+nowhere — the dashboard says so, per job and on the server's card, and
+`drush druker:check` warns about it wherever you run it.
+
+**Disabling a job** switches it off everywhere, unconditionally. That is the
+`Enable`/`Disable` operation on the job list, and it is what to reach for
+instead of deleting something you may want back: the command, the schedule and
+the assignment are all kept, and no worker is told about the job until it is
+switched on again.
+
+Job status is content, not config, so it cannot be overridden per environment
+and does not survive a database copy. Environment differences go on servers.
+
+### One rule
+
+**Never save an overridden entity from the UI in the environment that
+overrides it.** Editing and saving `worker_2` on the box where `settings.php`
+has rewritten its hostname writes that hostname into the stored config, and
+the next `drush cex` carries a local value into production. The job list's
+`Enable`/`Disable` operation is deliberately not offered for servers for this
+reason; changing a server's flag for real is a trip to its form, on an
+environment that does not override it.
 
 ## Adding jobs from code
 

@@ -20,7 +20,11 @@
 
   {% if stranded %}
     <p class="druker-card__stranded">
-      {{ 'Disabled, so no worker matches this hostname. @count of its own jobs are picked up by nobody.'|t({'@count': stranded}) }}
+      {% trans %}
+        Disabled, so no worker matches this hostname, and one job it names is left with nobody to run it.
+      {% plural stranded %}
+        Disabled, so no worker matches this hostname, and @count jobs it names are left with nobody to run them.
+      {% endtrans %}
     </p>
   {% endif %}
 

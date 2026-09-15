@@ -5,3 +5,17 @@ druker.dashboard:
     _title: 'Druker'
   requirements:
     _permission: 'administer druker'
+
+druker.job_toggle:
+  path: '/admin/config/system/druker/jobs/{druker_job}/toggle'
+  defaults:
+    _controller: '\Drupal\druker\Controller\JobToggle::toggle'
+  options:
+    parameters:
+      druker_job:
+        type: 'entity:druker_job'
+  requirements:
+    _permission: 'administer druker'
+    # A link that changes state must not be followable by a prefetch, a
+    # crawler, or an image tag on another site.
+    _csrf_token: 'TRUE'

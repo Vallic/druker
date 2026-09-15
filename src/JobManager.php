@@ -158,6 +158,39 @@ class JobManager {
   }
 
   /**
+   * The servers a job names that exist and are switched on.
+   *
+   * @param \Drupal\druker\Entity\CronJobInterface $job
+   *   The job.
+   * @param \Drupal\druker\Entity\ServerInterface[] $servers
+   *   Every server, keyed by id.
+   *
+   * @return string[]
+   *   The ids of the servers that will actually pick this job up. Empty for a
+   *   job that names no server, which runs everywhere rather than nowhere —
+   *   see isStranded() for that distinction.
+   */
+  public function reachableServerIds(CronJobInterface $job, array $servers): array {
+    return array_values(array_filter(
+      $job->getServerIds(),
+      static fn(string $id): bool => isset($servers[$id]) && $servers[$id]->status(),
+    ));
+  }
+
+  /**
+   * Whether nothing at all will pick this job up.
+   *
+   * True only when the job names servers and every one of them is missing or
+   * disabled. A job that names no server is not stranded: it runs on all of
+   * them. A job that names three and has one left is not stranded either —
+   * that one still runs it, which is the case the dashboard used to count as
+   * abandoned on the card while saying the opposite in the warnings above it.
+   */
+  public function isStranded(CronJobInterface $job, array $servers): bool {
+    return $job->getServerIds() !== [] && $this->reachableServerIds($job, $servers) === [];
+  }
+
+  /**
    * Whether the worker will be able to read this job's schedule at all.
    *
    * One question asked in one place, because a job has three ways of saying
