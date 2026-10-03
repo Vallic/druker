@@ -7,7 +7,7 @@
     "homepage": "https://www.drupal.org/project/druker",
     "require": {
         "php": ">=8.3",
-        "drupal/core": "^11"
+        "drupal/core": "^11 || ^12"
     },
     "suggest": {
         "drush/drush": "The worker fetches its schedule with drush druker:jobs, so a site running the worker needs Drush."

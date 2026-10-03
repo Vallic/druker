@@ -1,7 +1,7 @@
 name: Druker
 description: Drupal Worker — generic scheduled job management for the Go worker binary.
 type: module
-core_version_requirement: ^11
+core_version_requirement: ^11 || ^12
 package: Druker
 dependencies:
   - drupal:user
