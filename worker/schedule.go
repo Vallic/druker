@@ -35,6 +35,10 @@ type Schedule struct {
 	Server  string `json:"server"`
 	Refresh int    `json:"refresh"`
 	Jobs    []Job  `json:"jobs"`
+
+	// WakeDir is where the site asks for a job to run now (claimWakes). Empty
+	// when the site has waking switched off, or is older than waking.
+	WakeDir string `json:"wake_dir"`
 }
 
 const (

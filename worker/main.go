@@ -174,7 +174,7 @@ func supervise(ctx context.Context, logger *slog.Logger, runner *Runner, state *
 			continue
 		}
 
-		logger.Info("schedule loaded", "jobs", len(schedule.Jobs), "next_check_in", refresh.String())
+		logger.Info("schedule loaded", "jobs", len(schedule.Jobs), "next_check_in", refresh.String(), "wake_dir", schedule.WakeDir)
 
 		// Held until the refresh period is up, then the loop asks again and
 		// picks up anything that changed in the admin UI. The cycle only ends
@@ -212,6 +212,7 @@ func run(ctx, cycle context.Context, logger *slog.Logger, runner *Runner, state 
 			lastMinute = minute
 
 			due := dueJobs(schedule, state, runner, lastFired, now, newMinute)
+			due = withWoken(due, claimWakes(schedule.WakeDir, schedule, runner, state, logger, now))
 
 			if newMinute {
 				// The line to turn on when the question is "why did my job
@@ -369,6 +370,13 @@ func dryRunSchedule(drush, host string, logger *slog.Logger) int {
 
 	fmt.Printf("Server:  %s\n", schedule.Server)
 	fmt.Printf("Refresh: %s\n", schedule.RefreshPeriod())
+
+	if schedule.WakeDir != "" {
+		fmt.Printf("Wake:    %s\n", schedule.WakeDir)
+	} else {
+		fmt.Printf("Wake:    off\n")
+	}
+
 	fmt.Printf("Jobs:    %d\n\n", len(schedule.Jobs))
 
 	// Sized to the widest label rather than a guess: a real schedule has job

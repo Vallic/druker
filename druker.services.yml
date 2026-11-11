@@ -5,3 +5,16 @@ services:
       - '@entity_type.manager'
       - '@event_dispatcher'
       - '@settings'
+      - '@druker.wake'
+  druker.wake:
+    class: Drupal\druker\Wake
+    arguments:
+      - '@file_system'
+      - '@stream_wrapper_manager'
+      - '@settings'
+      - '@logger.channel.druker'
+  logger.channel.druker:
+    parent: logger.channel_base
+    arguments: ['druker']
+  Drupal\druker\Wake: '@druker.wake'
+  Drupal\druker\JobManager: '@druker.job_manager'

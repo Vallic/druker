@@ -111,7 +111,9 @@ They meet at one command:
 drush druker:jobs <hostname>
 ```
 
-which prints the schedule as JSON. That payload is the whole contract between
+which prints the schedule as JSON: the server, its refresh, the jobs, and the
+directory where the site asks for a job to run now (`wake_dir`, see
+[Waking a job](#waking-a-job)). That payload is the whole contract between
 the two halves. It is produced by `JobManager::formatJob()`, consumed by the
 `Job` struct in `worker/schedule.go`, and `examples/sample-output.json` is a
 copy of it that the worker's tests parse on every run. **If you change one
@@ -513,12 +515,61 @@ $event->addJob([
 The shape is the same one `formatJob()` produces. Anything the worker cannot
 read it drops, with a line in its log saying which job and why.
 
+## Waking a job
+
+A schedule says when a job runs at the latest. Sometimes the site knows
+sooner that there is work: a webhook stored an event, someone sent an
+invitation, a queue got its first item. Rather than run the job every few
+seconds for the sake of those moments, the site can ask the worker to run it
+now:
+
+```php
+\Drupal::service('druker.wake')->wake($job);  // a Cron Job, or its id
+```
+
+or from a terminal, by id or by name:
+
+```
+drush druker:wake 12
+drush druker:wake "Process the mail queue"
+```
+
+The job starts within a second or two, on every worker that runs it: the
+signal is a file named after the job's id, in a directory the site and the
+worker share, and the worker lists that directory on every tick (its
+one-second clock), which costs a directory read rather than a Drush call.
+
+- **Once per signal.** A worker claims a signal by removing its file, so a job
+  run by several workers that share the directory runs once, on whichever got
+  there first. Waking a job again before the worker gets to it is the same
+  file, so the same one run.
+- **After a run in progress.** A woken job that is running keeps its signal,
+  and runs again as soon as it finishes: what woke it may have arrived after
+  the running copy looked. A job that allows overlap starts alongside instead.
+- **Its schedule stands.** A woken interval or recurring job still runs at its
+  next turn; a one-time job already done is not run again.
+- **Never in the way.** A signal that cannot be written is logged and the job
+  runs at its next turn, so code that wakes a job keeps the job's schedule as
+  the floor and never depends on the wake. A signal for a job no worker runs
+  (disabled, or its server gone) is removed after an hour.
+
+**Where the signals go.** `$settings['druker_wake_dir']`, a path or a stream
+URI. Unset, it is `private://druker/wake` on a site with a private file
+system — the directory a web server and a worker in another container or on
+another machine most often share — and otherwise a directory of the site's
+own under `temporary://`, which serves only a worker on the same machine.
+`FALSE` switches waking off. The worker is told the directory in the schedule
+(`wake_dir`), so it is set in one place; run it as the site's user, so it can
+remove what the site writes. `drush druker:check` says when waking is off, or
+when the directory cannot be written.
+
 ## Commands
 
 | Command | What it is for |
 |---|---|
 | `drush druker:jobs [host]` | The payload the worker fetches. `--pretty` to read it |
 | `drush druker:check [host]` | Find jobs the worker would silently drop. Exits non-zero if any |
+| `drush druker:wake <job>` | Run a job now, by id or by name (see [Waking a job](#waking-a-job)) |
 
 ## Working on the worker
 

@@ -9,6 +9,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\druker\Entity\CronJobInterface;
 use Drupal\druker\Event\CollectJobsEvent;
 use Drupal\druker\JobManager;
+use Drupal\druker\Wake;
 use Drush\Attributes as CLI;
 use Drush\Commands\AutowireTrait;
 use Drush\Commands\DrushCommands;
@@ -18,7 +19,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * Drush commands for Druker.
  *
  * The worker binary calls druker:jobs and nothing else. Everything here is
- * either that command or a way for a person to see what the worker sees.
+ * either that command, a way for a person to see what the worker sees, or a
+ * way to ask it to run a job now.
  */
 final class DrukerCommands extends DrushCommands {
 
@@ -29,6 +31,8 @@ final class DrukerCommands extends DrushCommands {
     private readonly JobManager $jobManager,
     #[Autowire(service: 'entity_type.manager')]
     private readonly EntityTypeManagerInterface $entityTypeManager,
+    #[Autowire(service: 'druker.wake')]
+    private readonly Wake $wake,
   ) {
     parent::__construct();
   }
@@ -102,6 +106,7 @@ final class DrukerCommands extends DrushCommands {
     // why the job they created never runs.
     $this->reportWithheldShellJobs();
     $this->reportStrandedJobs();
+    $this->reportWake((string) ($schedule['wake_dir'] ?? ''));
 
     if ($problems !== []) {
       foreach ($problems as $problem) {
@@ -116,6 +121,69 @@ final class DrukerCommands extends DrushCommands {
     ]));
 
     return self::EXIT_SUCCESS;
+  }
+
+  /**
+   * Ask the worker to run a job now, rather than at its next turn.
+   */
+  #[CLI\Command(name: 'druker:wake', aliases: ['dk:wake'])]
+  #[CLI\Argument(name: 'job', description: 'The job: its id, or its name when no other job has it.')]
+  #[CLI\Usage(name: 'drush druker:wake 12', description: 'Run job 12 within a second or two.')]
+  #[CLI\Usage(name: 'drush druker:wake "Drupal cron"', description: 'The same, by name.')]
+  public function wake(string $job): int {
+    $storage = $this->entityTypeManager->getStorage('druker_job');
+    $found = ctype_digit($job) ? array_filter([$storage->load((int) $job)]) : $storage->loadByProperties(['label' => $job]);
+
+    if (count($found) !== 1) {
+      $this->logger()->error($found === []
+        ? dt('No job is called @job.', ['@job' => $job])
+        : dt('@count jobs are called @job: name it by its id.', ['@count' => count($found), '@job' => $job]));
+      return self::EXIT_FAILURE;
+    }
+
+    $target = reset($found);
+    if (!$target instanceof CronJobInterface) {
+      return self::EXIT_FAILURE;
+    }
+
+    if (!$this->wake->wake($target)) {
+      $this->logger()->error(dt('The signal could not be written, so @job runs at its next turn. Check @setting.', [
+        '@job' => $target->label(),
+        '@setting' => "\$settings['" . Wake::SETTING . "']",
+      ]));
+      return self::EXIT_FAILURE;
+    }
+
+    $this->logger()->success(dt('@job is woken: a worker that runs it starts it within a second or two.', ['@job' => $target->label()]));
+    return self::EXIT_SUCCESS;
+  }
+
+  /**
+   * Says where waking stands: off, or a directory the site cannot write.
+   */
+  private function reportWake(string $directory): void {
+    if ($directory === '') {
+      $this->logger()->notice(dt('Waking is off: jobs run only on their schedule.'));
+      return;
+    }
+
+    $writable = is_dir($directory) ? is_writable($directory) : is_writable($this->existingParent($directory));
+    if (!$writable) {
+      $this->logger()->warning(dt('The wake directory @dir cannot be written, so a woken job runs only at its next turn. Set @setting to a directory the site and the worker share.', [
+        '@dir' => $directory,
+        '@setting' => "\$settings['" . Wake::SETTING . "']",
+      ]));
+    }
+  }
+
+  /**
+   * The nearest directory above a path that exists.
+   */
+  private function existingParent(string $path): string {
+    do {
+      $path = dirname($path);
+    } while (!is_dir($path) && $path !== dirname($path));
+    return $path;
   }
 
   /**

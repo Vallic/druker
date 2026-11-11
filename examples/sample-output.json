@@ -1,6 +1,7 @@
 {
   "server": "web-01",
   "refresh": 600,
+  "wake_dir": "/var/www/private/druker/wake",
   "jobs": [
     {
       "id": 1,

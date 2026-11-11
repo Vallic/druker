@@ -29,6 +29,7 @@ class JobManager {
     protected EntityTypeManagerInterface $entityTypeManager,
     protected EventDispatcherInterface $eventDispatcher,
     protected Settings $settings,
+    protected ?Wake $wake = NULL,
   ) {}
 
   /**
@@ -51,6 +52,7 @@ class JobManager {
    * {
    *   "server": "web-01",
    *   "refresh": 1800,
+   *   "wake_dir": "/var/www/private/druker/wake",
    *   "jobs": [
    *     {"id": 1, "command": "...", "type": "cron", "cron": "0 2 * * *"},
    *     {"id": 2, "command": "...", "type": "once", "run_at": 1747392000}
@@ -107,6 +109,8 @@ class JobManager {
       // The server's setting is the starting point; a subscriber may have
       // moved it, and the worker picks the change up on its next fetch.
       'refresh' => $event->getRefresh(),
+      // Where the site asks for a job to run now (Wake); empty when off.
+      'wake_dir' => $this->wake?->directory() ?? '',
       'jobs' => $event->getJobs(),
     ];
   }

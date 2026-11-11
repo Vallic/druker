@@ -32,6 +32,10 @@ func TestParsesTheDrupalSample(t *testing.T) {
 		t.Errorf("refresh: got %d", schedule.Refresh)
 	}
 
+	if schedule.WakeDir != "/var/www/private/druker/wake" {
+		t.Errorf("wake_dir: got %q", schedule.WakeDir)
+	}
+
 	if len(schedule.Jobs) != 8 {
 		t.Fatalf("jobs: got %d, want 8", len(schedule.Jobs))
 	}

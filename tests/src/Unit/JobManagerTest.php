@@ -177,6 +177,7 @@ class JobManagerTest extends UnitTestCase {
     $this->assertSame('web-01', $result['server']);
     $this->assertSame(300, $result['refresh']);
     $this->assertSame([], $result['jobs']);
+    $this->assertSame('', $result['wake_dir'], 'Without the wake service, the worker is told waking is off.');
   }
 
   /**

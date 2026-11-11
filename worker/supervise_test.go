@@ -215,3 +215,51 @@ func TestARunningJobOutlivesTheRefresh(t *testing.T) {
 		t.Error("the job finished but was not recorded as done")
 	}
 }
+
+// A wake starts a job within a tick or two, far from its interval.
+func TestAWokenJobRunsAtOnce(t *testing.T) {
+	defer func(floor time.Duration) { MinimumRefresh = floor }(MinimumRefresh)
+	MinimumRefresh = 10 * time.Millisecond
+
+	wakeDir := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "ran")
+
+	fetcher := &countingFetch{
+		schedule: &Schedule{
+			Refresh: 60,
+			WakeDir: wakeDir,
+			Jobs: []Job{{
+				ID:      4,
+				Name:    "hourly",
+				Command: "-c 'echo done >> " + marker + "'",
+				Type:    typeInterval,
+				Every:   3600,
+				Async:   true,
+			}},
+		},
+	}
+
+	if err := os.WriteFile(filepath.Join(wakeDir, "4"), nil, 0o664); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := shellRunner(0)
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+
+	supervise(ctx, quietLogger(), runner, LoadState(""), fetcher.fetch)
+	runner.Stop(5 * time.Second)
+
+	output, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("the woken job did not run: %v", err)
+	}
+
+	if runs := strings.Count(string(output), "done"); runs != 1 {
+		t.Errorf("the job ran %d times, want 1", runs)
+	}
+
+	if _, err := os.Stat(filepath.Join(wakeDir, "4")); err == nil {
+		t.Error("the signal was not claimed")
+	}
+}
