@@ -51,9 +51,12 @@ class JobToggleTest extends BrowserTestBase {
    * Reloads the job from storage.
    */
   protected function reloaded(): CronJobInterface {
-    return \Drupal::entityTypeManager()
+    $job = \Drupal::entityTypeManager()
       ->getStorage('druker_job')
       ->loadUnchanged($this->job->id());
+    assert($job instanceof CronJobInterface);
+
+    return $job;
   }
 
   /**

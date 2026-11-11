@@ -52,9 +52,7 @@ class StrandedJobsTest extends KernelTestBase {
     Server::create(['id' => 'off', 'label' => 'Off', 'hostname' => 'off-box', 'status' => FALSE])->save();
 
     $this->jobManager = $this->container->get('druker.job_manager');
-    $this->servers = $this->container->get('entity_type.manager')
-      ->getStorage('druker_server')
-      ->loadMultiple();
+    $this->servers = Server::loadMultiple();
   }
 
   /**

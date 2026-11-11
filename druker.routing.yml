@@ -16,6 +16,6 @@ druker.job_toggle:
         type: 'entity:druker_job'
   requirements:
     _permission: 'administer druker'
-    # A link that changes state must not be followable by a prefetch, a
-    # crawler, or an image tag on another site.
+    # A link that changes state must not be something a prefetch, a crawler,
+    # or an image tag on another site can follow.
     _csrf_token: 'TRUE'

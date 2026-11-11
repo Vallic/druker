@@ -32,7 +32,7 @@ variables:
   ################
   SKIP_TWIG_CS_FIXER: '1'
 
-  _CSPELL_WORDS: 'advancedqueue, druker, endfor, gofmt, journalctl, klaxon, Međimorec, valic'
+  _CSPELL_WORDS: 'advancedqueue, druker, endfor, gofmt, journalctl, klaxon, logfmt, Međimorec, pgpassword, redactions, valic'
 
   # The Go toolchain the worker is built and tested with. Kept at the version
   # in worker/go.mod, which is a floor rather than a preference.

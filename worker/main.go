@@ -133,8 +133,8 @@ func main() {
 func supervise(ctx context.Context, logger *slog.Logger, runner *Runner, state *State, fetch func() (*Schedule, error)) {
 	// When each recurring job last started, kept across refreshes. Reset with
 	// every schedule it would let a refresh landing in a job's minute start
-	// that job a second time, and let an interval boundary passing during the
-	// fetch go unrun.
+	// that job a second time, and skip an interval boundary that passed during
+	// the fetch.
 	lastFired := map[int]int64{}
 
 	for {
