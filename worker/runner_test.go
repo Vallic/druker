@@ -35,7 +35,7 @@ func TestRunsAJobToCompletion(t *testing.T) {
 	runner := shellRunner(0)
 
 	done := make(chan struct{})
-	started := runner.Start(context.Background(), shellJob(1, "touch "+marker, true), func() { close(done) })
+	started := runner.Start(shellJob(1, "touch "+marker, true), func(bool) { close(done) })
 
 	if !started {
 		t.Fatal("the job should have started")
@@ -54,7 +54,7 @@ func TestAJobDoesNotOverlapItself(t *testing.T) {
 	runner := shellRunner(0)
 	release := make(chan struct{})
 
-	first := runner.Start(context.Background(), shellJob(1, "sleep 5", true), nil)
+	first := runner.Start(shellJob(1, "sleep 5", true), nil)
 	if !first {
 		t.Fatal("the first run should have started")
 	}
@@ -64,7 +64,7 @@ func TestAJobDoesNotOverlapItself(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	if runner.Start(context.Background(), shellJob(1, "true", true), nil) {
+	if runner.Start(shellJob(1, "true", true), nil) {
 		t.Error("a second run should have been refused while the first is going")
 	}
 
@@ -74,7 +74,7 @@ func TestAJobDoesNotOverlapItself(t *testing.T) {
 // A job that depends on another must not start while that one is going.
 func TestWaitForBlocksUntilTheDependencyFinishes(t *testing.T) {
 	runner := shellRunner(0)
-	runner.Start(context.Background(), shellJob(1, "sleep 0.3", true), nil)
+	runner.Start(shellJob(1, "sleep 0.3", true), nil)
 
 	for !runner.Running(1) {
 		time.Sleep(time.Millisecond)
@@ -108,7 +108,7 @@ func TestWaitForReturnsImmediatelyWhenNothingIsRunning(t *testing.T) {
 // A shutdown must not leave WaitFor blocking forever.
 func TestWaitForGivesUpWhenTheContextEnds(t *testing.T) {
 	runner := shellRunner(0)
-	runner.Start(context.Background(), shellJob(1, "sleep 5", true), nil)
+	runner.Start(shellJob(1, "sleep 5", true), nil)
 
 	for !runner.Running(1) {
 		time.Sleep(time.Millisecond)
@@ -131,7 +131,7 @@ func TestJobTimeoutStopsALongJob(t *testing.T) {
 
 	done := make(chan struct{})
 	started := time.Now()
-	runner.Start(context.Background(), shellJob(1, "sleep 5", true), func() { close(done) })
+	runner.Start(shellJob(1, "sleep 5", true), func(bool) { close(done) })
 
 	<-done
 
@@ -150,7 +150,7 @@ func TestJobTimeoutKillsChildrenToo(t *testing.T) {
 
 	// The shell forks here rather than replacing itself, so there is a
 	// grandchild holding the pipe.
-	runner.Start(context.Background(), shellJob(1, "sleep 5 & wait", true), func() { close(done) })
+	runner.Start(shellJob(1, "sleep 5 & wait", true), func(bool) { close(done) })
 
 	<-done
 
@@ -168,7 +168,7 @@ func TestRunnerIsSafeUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			runner.Start(context.Background(), shellJob(id%5, "true", true), nil)
+			runner.Start(shellJob(id%5, "true", true), nil)
 			runner.WaitFor(context.Background(), id%5)
 			runner.Running(id % 5)
 		}(i)
@@ -185,7 +185,7 @@ func TestShellRunnerGetsTheWholeCommandLine(t *testing.T) {
 	runner := NewRunner("/bin/sh", dir, quietLogger(), 0)
 
 	done := make(chan struct{})
-	runner.Start(context.Background(), realShellJob(1, "echo one two > out.txt && echo three >> out.txt"), func() { close(done) })
+	runner.Start(realShellJob(1, "echo one two > out.txt && echo three >> out.txt"), func(bool) { close(done) })
 	<-done
 	runner.Wait()
 
@@ -205,7 +205,7 @@ func TestJobsRunInTheConfiguredDirectory(t *testing.T) {
 	runner := NewRunner("/bin/sh", dir, quietLogger(), 0)
 
 	done := make(chan struct{})
-	runner.Start(context.Background(), realShellJob(1, "pwd > where.txt"), func() { close(done) })
+	runner.Start(realShellJob(1, "pwd > where.txt"), func(bool) { close(done) })
 	<-done
 	runner.Wait()
 
@@ -246,4 +246,127 @@ func TestDrushRunnerSplitsArguments(t *testing.T) {
 	if len(args) != 2 || args[0] != "sql:query" {
 		t.Errorf("got args %#v", args)
 	}
+}
+
+// A job that allows overlap starts alongside a run of itself, and a
+// dependency on it waits for every run to finish.
+func TestAnOverlappingJobRunsAlongsideItself(t *testing.T) {
+	runner := shellRunner(0)
+
+	first := shellJob(1, "sleep 0.3", true)
+	first.Overlap = true
+	second := shellJob(1, "sleep 0.6", true)
+	second.Overlap = true
+
+	started := time.Now()
+
+	if !runner.Start(first, nil) || !runner.Start(second, nil) {
+		t.Fatal("both runs should have started")
+	}
+
+	runner.WaitFor(context.Background(), 1)
+
+	if waited := time.Since(started); waited < 500*time.Millisecond {
+		t.Errorf("WaitFor returned after %s, before the second run finished", waited)
+	}
+
+	if runner.Running(1) {
+		t.Error("the job should no longer be running")
+	}
+}
+
+// A shutdown lets a job that finishes within the grace finish.
+func TestStopWaitsForRunningJobs(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	runner := shellRunner(0)
+
+	interrupted := make(chan bool, 1)
+	runner.Start(shellJob(1, "sleep 0.5; touch "+marker, true), func(stopped bool) { interrupted <- stopped })
+
+	if !runner.Stop(5 * time.Second) {
+		t.Fatal("the job finished within the grace, Stop should say so")
+	}
+
+	if <-interrupted {
+		t.Error("a job that finished on its own was reported as interrupted")
+	}
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("the job was cut short: %v", err)
+	}
+}
+
+// A job still running when the grace is up gets SIGTERM, and is reported as
+// interrupted rather than failed.
+func TestStopTerminatesJobsThatOutliveTheGrace(t *testing.T) {
+	runner := shellRunner(0)
+
+	interrupted := make(chan bool, 1)
+	runner.Start(shellJob(1, "sleep 30", true), func(stopped bool) { interrupted <- stopped })
+
+	for !runner.Running(1) {
+		time.Sleep(time.Millisecond)
+	}
+
+	started := time.Now()
+
+	if runner.Stop(100 * time.Millisecond) {
+		t.Error("the job outlived the grace, Stop should say so")
+	}
+
+	if took := time.Since(started); took > 3*time.Second {
+		t.Errorf("Stop took %s: SIGTERM did not stop a plain sleep", took)
+	}
+
+	if !<-interrupted {
+		t.Error("a job stopped by the shutdown should be reported as interrupted")
+	}
+}
+
+// A job that ignores SIGTERM is killed killAfter later, children and all.
+func TestStopEscalatesToSIGKILL(t *testing.T) {
+	defer func(after time.Duration) { killAfter = after }(killAfter)
+	killAfter = 200 * time.Millisecond
+
+	runner := shellRunner(0)
+	runner.Start(shellJob(1, `trap "" TERM; sleep 30 & wait`, true), nil)
+
+	for !runner.Running(1) {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Give the shell time to install the trap before the signal arrives.
+	time.Sleep(100 * time.Millisecond)
+
+	started := time.Now()
+	runner.Stop(50 * time.Millisecond)
+
+	if took := time.Since(started); took > 3*time.Second {
+		t.Errorf("Stop took %s: a job ignoring SIGTERM was never killed", took)
+	}
+}
+
+// Nothing starts once the runner is stopping.
+func TestAStoppedRunnerRefusesNewJobs(t *testing.T) {
+	runner := shellRunner(0)
+	runner.Stop(time.Second)
+
+	if runner.Start(shellJob(1, "true", true), nil) {
+		t.Error("a job started after Stop")
+	}
+}
+
+// A job cut short by its own timeout is a failure, not an interruption: a
+// one-time job that times out is recorded, not run again on every restart.
+func TestATimeoutIsNotAnInterruption(t *testing.T) {
+	runner := shellRunner(100 * time.Millisecond)
+
+	interrupted := make(chan bool, 1)
+	runner.Start(shellJob(1, "sleep 5", true), func(stopped bool) { interrupted <- stopped })
+
+	if <-interrupted {
+		t.Error("a timed-out job was reported as interrupted by a shutdown")
+	}
+
+	runner.Wait()
 }

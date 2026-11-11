@@ -89,3 +89,13 @@ function druker_update_11004(): string {
 
   return (string) t('Existing jobs are unchanged: a job with no period keeps the cron expression or run-at date it already had.');
 }
+
+/**
+ * Adds the overlap field, so a job can be allowed to run alongside itself.
+ */
+function druker_update_11005(): string {
+  \Drupal::entityDefinitionUpdateManager()
+    ->installFieldStorageDefinition('overlap', 'druker_job', 'druker', CronJob::overlapFieldDefinition());
+
+  return (string) t('Existing jobs do not overlap themselves, as before.');
+}

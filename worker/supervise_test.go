@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,5 +160,58 @@ func TestAMissingRefreshDoesNotBecomeABusyLoop(t *testing.T) {
 	// RefreshPeriod turns 0 into the half-hour default, so one fetch and a wait.
 	if calls := fetcher.count(); calls != 1 {
 		t.Errorf("fetched %d times, want 1: a zero refresh was taken literally", calls)
+	}
+}
+
+// A refresh stops the schedule, not the jobs it started.
+//
+// The bug this guards: jobs ran under the refresh cycle's context, so every
+// refresh SIGKILLed whatever was still running — a queue processor that
+// started a minute before the refresh got a minute.
+func TestARunningJobOutlivesTheRefresh(t *testing.T) {
+	defer func(floor time.Duration) { MinimumRefresh = floor }(MinimumRefresh)
+	MinimumRefresh = 10 * time.Millisecond
+
+	marker := filepath.Join(t.TempDir(), "ran")
+
+	// Started in the first one-second cycle, finishes in the third.
+	fetcher := &countingFetch{
+		schedule: &Schedule{
+			Refresh: 1,
+			Jobs: []Job{{
+				ID:      1,
+				Name:    "long",
+				Command: "-c 'sleep 2; echo done >> " + marker + "'",
+				Type:    typeOnce,
+				RunAt:   time.Now().Unix() - 1,
+				Async:   true,
+			}},
+		},
+	}
+
+	runner := shellRunner(0)
+	state := LoadState("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
+	defer cancel()
+
+	supervise(ctx, quietLogger(), runner, state, fetcher.fetch)
+	runner.Stop(5 * time.Second)
+
+	if calls := fetcher.count(); calls < 3 {
+		t.Fatalf("fetched %d times: the job never lived through a refresh", calls)
+	}
+
+	output, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("the job was killed by a refresh: %v", err)
+	}
+
+	if runs := strings.Count(string(output), "done"); runs != 1 {
+		t.Errorf("the job ran %d times, want 1", runs)
+	}
+
+	if !state.Completed(1) {
+		t.Error("the job finished but was not recorded as done")
 	}
 }

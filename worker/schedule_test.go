@@ -42,6 +42,10 @@ func TestParsesTheDrupalSample(t *testing.T) {
 		t.Errorf("interval job: got type %q every %d offset %d", interval.Type, interval.Every, interval.Offset)
 	}
 
+	if !interval.Overlap {
+		t.Error("the queue processor allows overlap in the sample")
+	}
+
 	first := schedule.Jobs[0]
 
 	if first.Command != "advancedqueue:queue:process mail" {
@@ -49,6 +53,9 @@ func TestParsesTheDrupalSample(t *testing.T) {
 	}
 	if !first.Async {
 		t.Error("the first job is asynchronous in the sample")
+	}
+	if first.Overlap {
+		t.Error("the first job does not allow overlap in the sample")
 	}
 	if !first.Due(at("2026-09-13 12:34")) {
 		t.Error("a every-minute job should be due every minute")

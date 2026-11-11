@@ -100,6 +100,15 @@ interface CronJobInterface extends ContentEntityInterface {
   public function isAsync(): bool;
 
   /**
+   * Whether a run may start while the previous run is still going.
+   *
+   * When FALSE, the worker skips a turn that comes round while the job is
+   * still running, whether the turn comes from the same schedule or from the
+   * next one after a refresh.
+   */
+  public function allowsOverlap(): bool;
+
+  /**
    * ID of the job that must complete before this one starts, or NULL.
    */
   public function getDependsOnId(): ?int;

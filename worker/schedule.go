@@ -18,6 +18,7 @@ type Job struct {
 	Command   string `json:"command"`
 	Runner    string `json:"runner"`
 	Async     bool   `json:"async"`
+	Overlap   bool   `json:"overlap"`
 	DependsOn *int   `json:"depends_on"`
 	Type      string `json:"type"`
 	Cron      string `json:"cron"`

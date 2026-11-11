@@ -114,6 +114,11 @@ class CronJobForm extends ContentEntityForm {
       ];
     }
 
+    // A one-time job has no next turn to overlap with.
+    $form['overlap']['#states'] = [
+      'invisible' => [':input[name="timing_type"]' => ['value' => CronJobInterface::TIMING_ONCE]],
+    ];
+
     return $form;
   }
 

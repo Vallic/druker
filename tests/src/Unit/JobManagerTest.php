@@ -242,6 +242,7 @@ class JobManagerTest extends UnitTestCase {
     $this->assertSame('cron', $formatted['type']);
     $this->assertSame('0 0 * * *', $formatted['cron']);
     $this->assertTrue($formatted['async']);
+    $this->assertFalse($formatted['overlap']);
     $this->assertNull($formatted['depends_on']);
     $this->assertArrayNotHasKey('run_at', $formatted);
   }
@@ -300,6 +301,7 @@ class JobManagerTest extends UnitTestCase {
       dependsOn: NULL,
       timingEvery: 25,
       timingOffset: 4,
+      overlap: TRUE,
     );
 
     [$jobStorage, $serverStorage] = $this->buildStorageMocks(
@@ -322,6 +324,7 @@ class JobManagerTest extends UnitTestCase {
     $this->assertSame('interval', $formatted['type']);
     $this->assertSame(25, $formatted['every']);
     $this->assertSame(4, $formatted['offset']);
+    $this->assertTrue($formatted['overlap']);
     $this->assertArrayNotHasKey('cron', $formatted);
     $this->assertArrayNotHasKey('run_at', $formatted);
   }
@@ -446,6 +449,7 @@ class JobManagerTest extends UnitTestCase {
     string $runner = CronJobInterface::RUNNER_DRUSH,
     ?int $timingEvery = NULL,
     int $timingOffset = 0,
+    bool $overlap = FALSE,
   ): CronJobInterface {
     $job = $this->createMock(CronJobInterface::class);
     $job->method('id')->willReturn($id);
@@ -456,6 +460,7 @@ class JobManagerTest extends UnitTestCase {
     $job->method('getTimingEvery')->willReturn($timingEvery);
     $job->method('getTimingOffset')->willReturn($timingOffset);
     $job->method('isAsync')->willReturn($async);
+    $job->method('allowsOverlap')->willReturn($overlap);
     $job->method('getDependsOnId')->willReturn($dependsOn);
     $job->method('getRunner')->willReturn($runner);
 

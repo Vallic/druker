@@ -100,6 +100,11 @@ asking for two seconds nor a hand-edited config YAML can put a server into a
 loop that spends more time asking what to do than doing it. A payload with no
 refresh at all falls back to the 30-minute default rather than to zero.
 
+A refresh never touches a running job. It ends the worker's pass over the old
+schedule, not the jobs that pass started: a job that began at 22:57 with a
+refresh at 22:59 runs until it is done, and the new schedule will not start a
+second copy of it alongside unless the job allows overlap (see below).
+
 They meet at one command:
 
 ```
@@ -156,6 +161,7 @@ level=ERROR msg="cannot find drush" error="no vendor/bin/drush above [/ /tmp]; p
 | `-host` | Fetch another server's schedule, for checking what it would do |
 | `-state` | Where completed one-time jobs are remembered |
 | `-job-timeout` | Abandon a job that runs longer than this |
+| `-shutdown-grace` | On `SIGTERM`, how long running jobs get to finish. Default `30s`; `0` waits however long they take |
 | `-verbose` | Log every minute it evaluates, not only what it does |
 | `-log-format` | `text` (default) or `json` |
 
@@ -177,8 +183,21 @@ per line, for a shipper that would otherwise have to parse them back out:
 The keys do not change between the two, so a query written against one format
 still finds things in the other. Every line carries `server`, and job lines
 carry `job`, so one collector can hold several servers and still separate
-them. Send `SIGTERM` and the worker stops scheduling and gives running jobs 30
-seconds to finish.
+them.
+
+**Stopping.** On `SIGTERM` or `SIGINT` the worker stops starting jobs and gives
+the running ones `-shutdown-grace` (30 seconds by default) to finish. Whatever
+is still running after that gets `SIGTERM`, and `SIGKILL` ten seconds later,
+children included. The jobs never get the worker's own signal: each runs in
+its own process group, so a Ctrl-C in a terminal or a signal to the worker
+reaches only the worker. A one-time job stopped this way is not recorded as
+done and runs again when the worker comes back.
+
+`-shutdown-grace 0` makes a restart wait for every running job, however long
+it takes. Whatever supervises the worker has to wait as long: systemd's
+`TimeoutStopSec`, Docker's `--stop-timeout` / `stop_grace_period`,
+Kubernetes' `terminationGracePeriodSeconds`. When that runs out first, it kills
+the worker and its jobs together, without the `SIGTERM` step.
 
 ### Under systemd
 
@@ -203,6 +222,14 @@ ExecStart=/var/www/example/druker \
 
 Restart=always
 RestartSec=10
+
+# Stop signals the worker only; it stops its jobs itself, after the grace.
+# The default, control-group, SIGTERMs every job the moment a restart begins.
+KillMode=mixed
+# Longer than -shutdown-grace plus the ten seconds between SIGTERM and
+# SIGKILL, or systemd kills the jobs before the worker does. "infinity" with
+# -shutdown-grace 0.
+TimeoutStopSec=60
 
 # One-time completions live here, and must outlive a deploy.
 StateDirectory=druker
@@ -263,7 +290,8 @@ period is skipped rather than queued.
 does not run them again. That memory is a small JSON file — if the worker runs
 in a container, point `-state` at a volume, or a one-time job will run again
 after every deploy. Completion is recorded when the job *finishes*, so a worker
-killed mid-job will re-run it: at least once, rather than at most once.
+killed mid-job, or one that stops it at shutdown, will re-run it: at least
+once, rather than at most once.
 
 **Dependencies.** A job can be set to run after another. It waits while that
 job is running and starts when it finishes. A dependency chain that loops back
@@ -299,8 +327,10 @@ shell job that exists anyway is simply left out of the payload — so no worker
 ever sees it. `drush druker:check` says which jobs are being withheld and why,
 because a job that silently does not run is the worst way to find out.
 
-**No job ever overlaps itself.** A job still running when its next turn comes
-round is skipped for that turn, with a warning in the log.
+**By default no job overlaps itself.** A job still running when its next turn
+comes round is skipped for that turn, with a warning in the log. That holds
+across a refresh too: the turn may come from the schedule fetched after the
+job started, and it is still skipped.
 
 The failure this prevents is rarely the one people expect. It is a job that
 takes seven minutes on a five-minute schedule, quietly accumulating another
@@ -321,6 +351,13 @@ claim it and do it again.
 
 The guard is per job, per server. The same job assigned to three servers still
 runs on all three at once; that is what assigning it to three is for.
+
+**Allow overlapping runs** on the job form turns the guard off for that job
+(`overlap` in the payload): its next turn starts even while the last is still
+going. Use it for a job that is safe to run twice at once and is falling behind
+on one copy — a queue processor whose queue fills faster than one run drains
+it. A job that runs after it (`depends_on`) waits until every running copy has
+finished.
 
 ## Several environments
 
@@ -449,6 +486,7 @@ public function onCollectJobs(CollectJobsEvent $event): void {
     'type' => 'cron',
     'cron' => '0 4 * * *',
     'async' => TRUE,
+    'overlap' => FALSE,
     'depends_on' => NULL,
   ]);
 }
@@ -467,6 +505,7 @@ $event->addJob([
   'every' => 25,
   'offset' => 4,
   'async' => TRUE,
+  'overlap' => TRUE,
   'depends_on' => NULL,
 ]);
 ```

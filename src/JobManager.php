@@ -135,6 +135,7 @@ class JobManager {
       'command' => $job->getCommand(),
       'runner' => $job->getRunner(),
       'async' => $job->isAsync(),
+      'overlap' => $job->allowsOverlap(),
       'depends_on' => $job->getDependsOnId(),
     ];
 

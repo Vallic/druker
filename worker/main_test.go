@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -25,7 +27,7 @@ func TestARunningOneTimeJobIsNotOfferedAgain(t *testing.T) {
 		t.Fatalf("expected the job to be due, got %d", len(due))
 	}
 
-	runner.Start(context.Background(), due[0], nil)
+	runner.Start(due[0], nil)
 
 	for !runner.Running(1) {
 		time.Sleep(time.Millisecond)
@@ -58,7 +60,7 @@ func TestAnOverrunningCronJobIsStillOffered(t *testing.T) {
 	}
 
 	runner := shellRunner(0)
-	runner.Start(context.Background(), schedule.Jobs[0], nil)
+	runner.Start(schedule.Jobs[0], nil)
 
 	for !runner.Running(1) {
 		time.Sleep(time.Millisecond)
@@ -114,5 +116,92 @@ func TestAMissedTickStillRunsTheIntervalJob(t *testing.T) {
 
 	if lastFired[1] != 1230 {
 		t.Errorf("expected the missed boundary 1230 to be recorded, got %d", lastFired[1])
+	}
+}
+
+// A cron job is offered once per minute even when a refresh starts a new
+// schedule part way through that minute.
+//
+// The new schedule's first tick evaluates the minute afresh, so without the
+// record a job that had just run, or was still running, was due again.
+func TestACronJobIsNotOfferedTwiceInOneMinute(t *testing.T) {
+	cron, err := ParseCron("* * * * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schedule := &Schedule{
+		Refresh: 60,
+		Jobs:    []Job{{ID: 1, Name: "cron", Command: "-c true", Type: typeCron, schedule: cron, Async: true}},
+	}
+
+	lastFired := map[int]int64{}
+	now := time.Unix(1_800_000_000, 0)
+
+	if due := dueJobs(schedule, LoadState(""), shellRunner(0), lastFired, now, true); len(due) != 1 {
+		t.Fatalf("the job should be due, got %d", len(due))
+	}
+
+	// The next schedule's first tick, twenty seconds later in the same minute.
+	if due := dueJobs(schedule, LoadState(""), shellRunner(0), lastFired, now.Add(20*time.Second), true); len(due) != 0 {
+		t.Error("the job was offered a second time in the same minute")
+	}
+
+	if due := dueJobs(schedule, LoadState(""), shellRunner(0), lastFired, now.Add(time.Minute), true); len(due) != 1 {
+		t.Error("the job should be due again the next minute")
+	}
+}
+
+// What is known about a job survives a refresh; a new job waits for its
+// next boundary; a job no longer in the schedule is forgotten.
+func TestCarryOverKeepsWhatARefreshShouldNotReset(t *testing.T) {
+	schedule := &Schedule{
+		Jobs: []Job{
+			{ID: 1, Type: typeInterval, Every: 30},
+			{ID: 2, Type: typeInterval, Every: 30},
+		},
+	}
+
+	lastFired := map[int]int64{1: 1200, 9: 1200}
+
+	carryOver(schedule, lastFired, time.Unix(1247, 0))
+
+	if lastFired[1] != 1200 {
+		t.Errorf("a known job's last boundary was reset to %d: the 1230 run would be lost", lastFired[1])
+	}
+
+	if lastFired[2] != 1230 {
+		t.Errorf("a new job should be seeded with its current boundary 1230, got %d", lastFired[2])
+	}
+
+	if _, kept := lastFired[9]; kept {
+		t.Error("a job no longer in the schedule should be forgotten")
+	}
+}
+
+// A dependency wait cut short by a shutdown must not go on to start the job:
+// the job it depends on is still running.
+func TestAShutdownDuringADependencyWaitStartsNothing(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	runner := shellRunner(0)
+
+	runner.Start(shellJob(1, "sleep 2", true), nil)
+
+	for !runner.Running(1) {
+		time.Sleep(time.Millisecond)
+	}
+
+	dependsOn := 1
+	dependent := shellJob(2, "touch "+marker, true)
+	dependent.DependsOn = &dependsOn
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	startDue(ctx, quietLogger(), runner, LoadState(""), &Schedule{}, []Job{dependent}, time.Now())
+	runner.Wait()
+
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the job started before the job it depends on had finished")
 	}
 }

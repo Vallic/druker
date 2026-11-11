@@ -24,9 +24,14 @@ const (
 	// How long a fetch may take before it is abandoned.
 	fetchTimeout = 60 * time.Second
 
-	// How long to let jobs finish after a shutdown signal.
-	shutdownGrace = 30 * time.Second
+	// How long to let jobs finish after a shutdown signal, unless -shutdown-grace
+	// says otherwise.
+	defaultShutdownGrace = 30 * time.Second
 )
+
+// killAfter is how long a stopped job has between SIGTERM and SIGKILL. A var
+// only so a test can shorten it.
+var killAfter = 10 * time.Second
 
 func main() {
 	var (
@@ -35,6 +40,7 @@ func main() {
 		statePath  = flag.String("state", DefaultStatePath(), "Where to remember completed one-time jobs. Empty to not remember.")
 		workDir    = flag.String("dir", "", "Directory jobs run in. The project root above vendor/ when empty.")
 		jobTimeout = flag.Duration("job-timeout", 0, "Abandon a job that runs longer than this. Zero for no limit.")
+		grace      = flag.Duration("shutdown-grace", defaultShutdownGrace, "On SIGTERM, how long running jobs get to finish before they are stopped. Zero to wait for them however long they take.")
 		dryRun     = flag.Bool("dry-run", false, "Fetch the schedule, print what would run, and exit.")
 		verbose    = flag.Bool("verbose", false, "Log every tick, not only what happens.")
 		logFormat  = flag.String("log-format", logFormatText, "Log format: text or json.")
@@ -85,7 +91,9 @@ func main() {
 	}
 
 	// Signals stop the scheduler, then jobs are given a moment to finish. A
-	// container being rolled should not tear a half-written job in two.
+	// container being rolled should not tear a half-written job in two. The
+	// jobs never see the signal themselves: each runs in its own process
+	// group, and only the runner decides when to stop them.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -100,19 +108,19 @@ func main() {
 
 	supervise(ctx, logger, runner, state, fetch)
 
-	logger.Info("stopping, waiting for jobs to finish")
+	wait := *grace
+	if wait <= 0 {
+		// Long enough to mean "until they finish" without a second code path.
+		wait = time.Duration(1<<63 - 1)
+		logger.Info("stopping, waiting for running jobs to finish")
+	} else {
+		logger.Info("stopping, waiting for running jobs to finish", "grace", wait.String())
+	}
 
-	finished := make(chan struct{})
-	go func() {
-		runner.Wait()
-		close(finished)
-	}()
-
-	select {
-	case <-finished:
+	if runner.Stop(wait) {
 		logger.Info("stopped")
-	case <-time.After(shutdownGrace):
-		logger.Warn("stopped with jobs still running", "waited", shutdownGrace.String())
+	} else {
+		logger.Warn("stopped, after stopping the jobs that outlived the grace period")
 	}
 }
 
@@ -123,6 +131,12 @@ func main() {
 // empty schedule must wait, not spin, and a site that cannot be reached must
 // back off rather than hammer it.
 func supervise(ctx context.Context, logger *slog.Logger, runner *Runner, state *State, fetch func() (*Schedule, error)) {
+	// When each recurring job last started, kept across refreshes. Reset with
+	// every schedule it would let a refresh landing in a job's minute start
+	// that job a second time, and let an interval boundary passing during the
+	// fetch go unrun.
+	lastFired := map[int]int64{}
+
 	for {
 		if ctx.Err() != nil {
 			return
@@ -163,15 +177,21 @@ func supervise(ctx context.Context, logger *slog.Logger, runner *Runner, state *
 		logger.Info("schedule loaded", "jobs", len(schedule.Jobs), "next_check_in", refresh.String())
 
 		// Held until the refresh period is up, then the loop asks again and
-		// picks up anything that changed in the admin UI.
+		// picks up anything that changed in the admin UI. The cycle only ends
+		// the scheduling: jobs it started keep running.
 		cycle, cancel := context.WithTimeout(ctx, refresh)
-		run(cycle, logger, runner, state, schedule)
+		run(ctx, cycle, logger, runner, state, schedule, lastFired)
 		cancel()
 	}
 }
 
 // run keeps one schedule ticking until the cycle ends.
-func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State, schedule *Schedule) {
+//
+// Two contexts, because a refresh and a shutdown end different things. The
+// cycle ends at the refresh and stops this schedule offering jobs. ctx ends at
+// shutdown, and is what the jobs already offered wait on: a job queued behind
+// a long one, or waiting for its dependency, still starts after a refresh.
+func run(ctx, cycle context.Context, logger *slog.Logger, runner *Runner, state *State, schedule *Schedule, lastFired map[int]int64) {
 	// A minute is the finest granularity cron has, but the tick is a second
 	// so a one-time job lands close to the moment it was asked for.
 	ticker := time.NewTicker(time.Second)
@@ -179,20 +199,11 @@ func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State,
 
 	lastMinute := -1
 
-	// The boundary each interval job last started at. Seeded with the current
-	// one so that reloading the schedule is not itself an event: without this
-	// every interval job would be due on the first tick of every cycle, and a
-	// short refresh would turn a 10-minute job into a 10-minute-or-sooner one.
-	lastFired := make(map[int]int64, len(schedule.Jobs))
-	for _, job := range schedule.Jobs {
-		if job.Type == typeInterval {
-			lastFired[job.ID] = job.IntervalBoundary(time.Now())
-		}
-	}
+	carryOver(schedule, lastFired, time.Now())
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-cycle.Done():
 			return
 
 		case now := <-ticker.C:
@@ -220,17 +231,48 @@ func run(ctx context.Context, logger *slog.Logger, runner *Runner, state *State,
 	}
 }
 
+// carryOver brings lastFired up to date with a newly fetched schedule.
+//
+// An interval job seen for the first time is seeded with its current boundary
+// so that starting the worker, adding the job or switching it back on is not
+// itself an event: it runs at its next boundary, not straight away. A job
+// already known keeps the boundary it really started at, so one that passed
+// while the schedule was being fetched still runs. Jobs no longer in the
+// schedule are forgotten, and start afresh if they come back.
+func carryOver(schedule *Schedule, lastFired map[int]int64, now time.Time) {
+	present := make(map[int]bool, len(schedule.Jobs))
+
+	for _, job := range schedule.Jobs {
+		present[job.ID] = true
+
+		if _, known := lastFired[job.ID]; !known && job.Type == typeInterval {
+			lastFired[job.ID] = job.IntervalBoundary(now)
+		}
+	}
+
+	for id := range lastFired {
+		if !present[id] {
+			delete(lastFired, id)
+		}
+	}
+}
+
 // dueJobs is everything that should start now.
 //
 // lastFired is read and written here rather than inside Job, because a Job is
 // copied out of the schedule by value on every pass and anything recorded on
-// the copy would be thrown away with it.
+// the copy would be thrown away with it. It holds the minute a cron job last
+// started in and the boundary an interval job last started at.
 func dueJobs(schedule *Schedule, state *State, runner *Runner, lastFired map[int]int64, now time.Time, newMinute bool) []Job {
 	var due []Job
 
 	for _, job := range schedule.Jobs {
 		switch {
-		case job.Type == typeCron && newMinute && job.Due(now):
+		case job.Type == typeCron && newMinute && job.Due(now) && lastFired[job.ID] != minuteOf(now):
+			// Recorded so the minute is not offered twice. A refresh starts a
+			// new schedule part way through a minute, and that schedule's first
+			// tick evaluates the minute afresh.
+			lastFired[job.ID] = minuteOf(now)
 			due = append(due, job)
 
 		case job.Type == typeInterval && job.DueInterval(now, lastFired[job.ID]):
@@ -265,21 +307,36 @@ func startDue(ctx context.Context, logger *slog.Logger, runner *Runner, state *S
 		if job.DependsOn != nil && runner.Running(*job.DependsOn) {
 			logger.Info("waiting for the job it depends on", "job", job.Label(), "depends_on", *job.DependsOn)
 			runner.WaitFor(ctx, *job.DependsOn)
+
+			// Cut short by a shutdown, the dependency has not finished, and
+			// the job must not start ahead of it.
+			if ctx.Err() != nil {
+				return
+			}
 		}
 
 		finished := make(chan struct{})
 		job := job
 
-		started := runner.Start(ctx, job, func() {
-			if job.Type == typeOnce {
-				// Recorded whatever the outcome. A one-time job that failed
-				// is a thing to investigate, not to run again on a loop.
-				if err := state.Complete(job.ID, now.Unix()); err != nil {
-					logger.Error("cannot record the one-time job as done", "job", job.Label(), "error", err.Error())
-				}
+		started := runner.Start(job, func(interrupted bool) {
+			defer close(finished)
+
+			if job.Type != typeOnce {
+				return
 			}
 
-			close(finished)
+			// Stopped by a shutdown, it did not run: left unrecorded, it runs
+			// again when the worker comes back.
+			if interrupted {
+				logger.Warn("the one-time job will run again after a restart", "job", job.Label())
+				return
+			}
+
+			// Recorded whatever else the outcome. A one-time job that failed
+			// is a thing to investigate, not to run again on a loop.
+			if err := state.Complete(job.ID, now.Unix()); err != nil {
+				logger.Error("cannot record the one-time job as done", "job", job.Label(), "error", err.Error())
+			}
 		})
 
 		// A job that is not asynchronous holds the rest of this tick behind
@@ -292,6 +349,11 @@ func startDue(ctx context.Context, logger *slog.Logger, runner *Runner, state *S
 			}
 		}
 	}
+}
+
+// minuteOf is the start of t's minute, as a Unix time.
+func minuteOf(t time.Time) int64 {
+	return t.Unix() - t.Unix()%60
 }
 
 // dryRunSchedule prints what the worker would do, and returns an exit code.

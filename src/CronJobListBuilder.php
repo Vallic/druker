@@ -221,6 +221,10 @@ class CronJobListBuilder extends EntityListBuilder {
   protected function runs(CronJobInterface $job) {
     $parts = [$job->isAsync() ? $this->t('Alongside others') : $this->t('On its own')];
 
+    if ($job->allowsOverlap()) {
+      $parts[] = $this->t('may overlap itself');
+    }
+
     if (($depends_on = $job->getDependsOnId()) !== NULL) {
       $other = $this->storage->load($depends_on);
       $parts[] = $this->t('after @job', ['@job' => $other !== NULL ? $other->label() : '#' . $depends_on]);

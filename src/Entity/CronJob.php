@@ -144,6 +144,13 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
   /**
    * {@inheritdoc}
    */
+  public function allowsOverlap(): bool {
+    return (bool) $this->get('overlap')->value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getDependsOnId(): ?int {
     if ($this->get('depends_on')->isEmpty()) {
       return NULL;
@@ -199,11 +206,13 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setDefaultValue(TRUE)
       ->setDisplayOptions('form', ['type' => 'boolean_checkbox', 'weight' => 15]);
 
+    $fields['overlap'] = self::overlapFieldDefinition();
+
     $fields['depends_on'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Run after job'))
       ->setDescription(t('If set, this job will only start after the referenced job has finished in the same cycle.'))
       ->setSetting('target_type', 'druker_job')
-      ->setDisplayOptions('form', ['type' => 'options_select', 'weight' => 16]);
+      ->setDisplayOptions('form', ['type' => 'options_select', 'weight' => 17]);
 
     return $fields;
   }
@@ -248,6 +257,21 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setSetting('suffix', ' ' . t('seconds'))
       ->setDefaultValue(0)
       ->setDisplayOptions('form', ['type' => 'number', 'weight' => 8]);
+  }
+
+  /**
+   * The overlap field, also used by the update that adds it.
+   *
+   * Off by default, because a job that overlaps itself is rarely what anyone
+   * meant: a job slower than its own schedule piles up copies, and a job that
+   * mails or imports what it finds does that twice.
+   */
+  public static function overlapFieldDefinition(): BaseFieldDefinition {
+    return BaseFieldDefinition::create('boolean')
+      ->setLabel(t('Allow overlapping runs'))
+      ->setDescription(t('Start the next run even while the previous one is still going. When off, a run still going when its next turn comes skips that turn. Only for a job that is safe to run twice at once, such as a queue processor: queues lease their items, so two copies take different work.'))
+      ->setDefaultValue(FALSE)
+      ->setDisplayOptions('form', ['type' => 'boolean_checkbox', 'weight' => 16]);
   }
 
   /**
