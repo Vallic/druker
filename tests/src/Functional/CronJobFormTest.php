@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\druker\Functional;
 
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\druker\Entity\CronJobInterface;
 use Drupal\druker\Event\CollectJobsEvent;
@@ -18,6 +19,7 @@ use PHPUnit\Framework\Attributes\Group;
  * filled in, and the one that was chosen is checked properly.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class CronJobFormTest extends BrowserTestBase {
 
   /**

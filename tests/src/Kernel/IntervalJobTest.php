@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\druker\Kernel;
 
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\druker\Entity\CronJob;
 use Drupal\druker\Entity\CronJobInterface;
@@ -17,6 +18,7 @@ use PHPUnit\Framework\Attributes\Group;
  * formatJob() to the payload the worker parses.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class IntervalJobTest extends KernelTestBase {
 
   /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\druker\Kernel;
 
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\druker\Entity\CronJob;
 use Drupal\druker\Entity\CronJobInterface;
@@ -18,6 +19,7 @@ use PHPUnit\Framework\Attributes\Group;
  * the card while the warning beside it said the live server still ran it.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class StrandedJobsTest extends KernelTestBase {
 
   /**

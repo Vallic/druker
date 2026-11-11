@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\druker\Kernel;
 
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\druker\Entity\Server;
 use PHPUnit\Framework\Attributes\Group;
@@ -16,6 +17,7 @@ use PHPUnit\Framework\Attributes\Group;
  * that does not exist at all fails the test on save.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class ServerSchemaTest extends KernelTestBase {
 
   /**

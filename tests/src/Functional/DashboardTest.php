@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\druker\Functional;
 
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\druker\Entity\CronJob;
 use Drupal\druker\Entity\CronJobInterface;
@@ -19,6 +20,7 @@ use PHPUnit\Framework\Attributes\Group;
  * answering the question wrongly.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class DashboardTest extends BrowserTestBase {
 
   /**
