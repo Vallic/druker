@@ -26,6 +26,12 @@ type Job struct {
 	Every     int    `json:"every"`
 	Offset    int    `json:"offset"`
 
+	// Timeout is how many seconds one run may take before it is ended. Zero
+	// leaves it to the worker's -job-timeout; where that is set as well, the
+	// shorter wins, so a schedule cannot give a job longer than the person
+	// running the worker allowed.
+	Timeout int `json:"timeout"`
+
 	// Filled in by Prepare, not by Drupal.
 	schedule *CronSchedule
 }
@@ -199,6 +205,14 @@ func (s *Schedule) Prepare() []error {
 
 		default:
 			problems = append(problems, fmt.Errorf("job %s has unknown type %q", job.Label(), job.Type))
+			continue
+		}
+
+		// Dropped rather than run without one: a job whose author meant to
+		// bound it and got the sign wrong would otherwise run for as long as
+		// it liked.
+		if job.Timeout < 0 {
+			problems = append(problems, fmt.Errorf("job %s has a negative timeout of %ds", job.Label(), job.Timeout))
 			continue
 		}
 

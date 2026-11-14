@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -311,5 +312,26 @@ func TestPrepareRejectsUnusableIntervals(t *testing.T) {
 
 	if len(schedule.Jobs) != 1 || schedule.Jobs[0].ID != 3 {
 		t.Errorf("expected only the usable job to survive, got %v", schedule.Jobs)
+	}
+}
+
+// A job's timeout is read from the schedule, and a negative one drops the job.
+func TestATimeoutIsReadAndANegativeOneRefused(t *testing.T) {
+	schedule, err := ParseSchedule([]byte(`{"server":"console","refresh":300,"jobs":[
+		{"id":1,"name":"import","command":"vc:import","type":"interval","every":3600,"timeout":3000},
+		{"id":2,"name":"tick","command":"vc:tick","type":"interval","every":60},
+		{"id":3,"name":"wrong","command":"vc:wrong","type":"interval","every":60,"timeout":-5}
+	]}`))
+	if err != nil {
+		t.Fatalf("ParseSchedule: %v", err)
+	}
+
+	problems := schedule.Prepare()
+
+	if len(schedule.Jobs) != 2 || schedule.Jobs[0].Timeout != 3000 || schedule.Jobs[1].Timeout != 0 {
+		t.Errorf("kept %+v", schedule.Jobs)
+	}
+	if len(problems) != 1 || !strings.Contains(problems[0].Error(), "negative timeout") {
+		t.Errorf("problems: %v", problems)
 	}
 }

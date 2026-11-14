@@ -85,6 +85,15 @@ interface CronJobInterface extends ContentEntityInterface {
   public function getTimingOffset(): int;
 
   /**
+   * How many seconds one run may take before the worker ends it.
+   *
+   * Zero leaves it to the worker's -job-timeout. Where both are set the
+   * shorter wins: a schedule cannot give a job longer than the person running
+   * the worker allowed.
+   */
+  public function getTimeout(): int;
+
+  /**
    * The servers this job runs on.
    *
    * @return string[]

@@ -143,6 +143,12 @@ class JobManager {
       'depends_on' => $job->getDependsOnId(),
     ];
 
+    // Only where one is set: a worker from before the field reads an absent
+    // key as nothing, and so does this one.
+    if ($job->getTimeout() > 0) {
+      $result['timeout'] = $job->getTimeout();
+    }
+
     $result['type'] = $job->getTimingType();
 
     switch ($result['type']) {

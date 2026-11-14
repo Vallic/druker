@@ -162,7 +162,7 @@ level=ERROR msg="cannot find drush" error="no vendor/bin/drush above [/ /tmp]; p
 | `-dir` | Directory jobs run in. The project root above `vendor/` when empty |
 | `-host` | Fetch another server's schedule, for checking what it would do |
 | `-state` | Where completed one-time jobs are remembered |
-| `-job-timeout` | Abandon a job that runs longer than this |
+| `-job-timeout` | Abandon a job that runs longer than this. A job's own `timeout` is used instead where it is shorter |
 | `-shutdown-grace` | On `SIGTERM`, how long running jobs get to finish. Default `30s`; `0` waits however long they take |
 | `-verbose` | Log every minute it evaluates, not only what it does |
 | `-log-format` | `text` (default) or `json` |
@@ -511,6 +511,12 @@ $event->addJob([
   'depends_on' => NULL,
 ]);
 ```
+
+Any job may also carry a `timeout`, in seconds: how long one run may take
+before the worker ends it, with whatever it started. Absent or `0` leaves it
+to `-job-timeout`; where both are set the shorter wins, so a schedule cannot
+give a job longer than the worker allows. A job stored in the admin UI has the
+same setting as its **Timeout** field.
 
 The shape is the same one `formatJob()` produces. Anything the worker cannot
 read it drops, with a line in its log saying which job and why.

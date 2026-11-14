@@ -142,4 +142,18 @@ class IntervalJobTest extends KernelTestBase {
     $this->assertFalse($this->jobManager->isValidInterval(20, -1));
   }
 
+  /**
+   * A job's own timeout reaches the worker, and no timeout sends no key.
+   *
+   * An absent key is what a worker from before the field reads as "the
+   * worker's -job-timeout", so a job with none sends nothing rather than 0.
+   */
+  public function testTimeoutReachesTheWorker(): void {
+    $bounded = $this->job(['label' => 'Import', 'timing_every' => 3600, 'timeout' => 3000]);
+    $unbounded = $this->job(['label' => 'Tick', 'timing_every' => 60]);
+
+    $this->assertSame(3000, $this->payloadFor($bounded)['timeout'] ?? NULL);
+    $this->assertArrayNotHasKey('timeout', $this->payloadFor($unbounded) ?? []);
+  }
+
 }

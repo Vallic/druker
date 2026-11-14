@@ -249,6 +249,25 @@ func (r *Runner) release(id int) {
 	}
 }
 
+// limitFor is how long one run of a job may take, and whose limit that is.
+//
+// The job's own timeout where it has one, the worker's -job-timeout where it
+// has not, and the shorter of the two where both are set: the schedule says
+// what a job needs, and the person running the worker says what no job may
+// exceed. Zero is no limit.
+func (r *Runner) limitFor(job Job) (time.Duration, string) {
+	own := time.Duration(job.Timeout) * time.Second
+
+	switch {
+	case own > 0 && (r.timeout <= 0 || own <= r.timeout):
+		return own, "its timeout"
+	case r.timeout > 0:
+		return r.timeout, "-job-timeout"
+	default:
+		return 0, ""
+	}
+}
+
 // execute runs the job and logs the outcome, reporting whether it was
 // interrupted by the worker stopping.
 func (r *Runner) execute(job Job) bool {
@@ -260,10 +279,11 @@ func (r *Runner) execute(job Job) bool {
 	}
 
 	ctx := r.jobs
+	limit, whose := r.limitFor(job)
 
-	if r.timeout > 0 {
+	if limit > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.timeout)
+		ctx, cancel = context.WithTimeout(ctx, limit)
 		defer cancel()
 	}
 
@@ -303,7 +323,7 @@ func (r *Runner) execute(job Job) bool {
 		}
 
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			attrs = append(attrs, "reason", "ran longer than -job-timeout "+r.timeout.String())
+			attrs = append(attrs, "reason", "ran longer than "+whose+" "+limit.String())
 		}
 
 		r.logger.Error("failed", append(attrs, "output", trimForLog(string(output)))...)

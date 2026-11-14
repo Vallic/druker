@@ -14,6 +14,10 @@ import (
 // its signal in the directory for good.
 const wakeExpiry = time.Hour
 
+// maximumWakeDelay is the longest delay a signal can ask for. Matches
+// \Drupal\druker\Wake::MAXIMUM_DELAY.
+const maximumWakeDelay = time.Hour
+
 // claimWakes is the jobs the site has asked to run now, since the last tick.
 //
 // The site asks by touching a file named after the job's id in the wake
@@ -70,6 +74,13 @@ func claimWakes(dir string, schedule *Schedule, runner *Runner, state *State, lo
 
 		if job.Type == typeOnce && state.Completed(job.ID) {
 			_ = os.Remove(path)
+			continue
+		}
+
+		// A signal dated in the future asked for a delay (\Drupal\druker\Wake),
+		// and waits for its time. One dated further ahead than any delay
+		// can ask for was dated by a clock that is wrong, and is now.
+		if info, err := entry.Info(); err == nil && info.ModTime().After(now) && info.ModTime().Sub(now) <= maximumWakeDelay {
 			continue
 		}
 

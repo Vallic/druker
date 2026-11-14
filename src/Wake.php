@@ -28,6 +28,13 @@ use Psr\Log\LoggerInterface;
  * one machine. The worker learns the directory from the schedule
  * (`wake_dir`), so it is set in one place.
  *
+ * A signal can also ask for a delay: "there is more to do, but not yet".
+ * The file's modification time is then set to when the job should run, and
+ * the worker leaves a signal dated in the future where it is. Of two signals
+ * for one job the earlier wins, so asking for now overtakes a delay already
+ * written, and a delay never postpones a signal that is already due. A
+ * worker from before delays reads every signal as now.
+ *
  * Waking is a shortcut, never a guarantee: a signal that cannot be written
  * is logged and the job still runs at its next turn. Code that wakes a job
  * should keep the job's schedule as the floor.
@@ -38,6 +45,14 @@ class Wake {
    * The setting that names the directory, or switches waking off.
    */
   public const SETTING = 'druker_wake_dir';
+
+  /**
+   * The longest delay a signal may ask for, in seconds.
+   *
+   * A delay is for seconds, the gap between asking a provider for something
+   * and asking whether it is ready. Anything longer is the job's schedule.
+   */
+  public const MAXIMUM_DELAY = 3600;
 
   public function __construct(
     protected FileSystemInterface $fileSystem,
@@ -91,12 +106,17 @@ class Wake {
    *
    * @param \Drupal\druker\Entity\CronJobInterface|int $job
    *   The job, or its id.
+   * @param int $delay
+   *   Seconds the worker should wait before it runs the job; 0, the default,
+   *   is now. At most MAXIMUM_DELAY. A signal already due, or due sooner, is
+   *   left as it is.
    *
    * @return bool
-   *   Whether the signal was written. FALSE when waking is off, or the
-   *   directory cannot be written; the job then runs at its next turn.
+   *   Whether the signal was written, or one at least as soon was already
+   *   there. FALSE when waking is off, or the directory cannot be written;
+   *   the job then runs at its next turn.
    */
-  public function wake(CronJobInterface|int $job): bool {
+  public function wake(CronJobInterface|int $job, int $delay = 0): bool {
     $id = $job instanceof CronJobInterface ? (int) $job->id() : $job;
     $directory = $this->directory();
     if ($id <= 0 || $directory === '') {
@@ -111,7 +131,22 @@ class Wake {
       return FALSE;
     }
 
-    if (!@touch($directory . '/' . $id)) {
+    $path = $directory . '/' . $id;
+
+    if ($delay > 0) {
+      $due = time() + min($delay, self::MAXIMUM_DELAY);
+      clearstatcache(TRUE, $path);
+      $current = @filemtime($path);
+
+      // A signal due by then already says what this one would.
+      if ($current !== FALSE && $current <= $due) {
+        return TRUE;
+      }
+    }
+
+    // Without a time, touch() is now, which is sooner than any delay waiting
+    // in the directory.
+    if (!($delay > 0 ? @touch($path, $due) : @touch($path))) {
       $this->logger->warning('Cannot write a wake signal in @dir; job @id runs at its next turn instead.', [
         '@dir' => $directory,
         '@id' => $id,

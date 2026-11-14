@@ -99,3 +99,13 @@ function druker_update_11005(): string {
 
   return (string) t('Existing jobs do not overlap themselves, as before.');
 }
+
+/**
+ * Adds the timeout field, so a job can be given its own limit.
+ */
+function druker_update_11006(): string {
+  \Drupal::entityDefinitionUpdateManager()
+    ->installFieldStorageDefinition('timeout', 'druker_job', 'druker', CronJob::timeoutFieldDefinition());
+
+  return (string) t("Existing jobs keep the worker's own -job-timeout, as before.");
+}

@@ -11,6 +11,7 @@ use Drupal\druker\Entity\CronJobInterface;
 use Drupal\druker\JobManager;
 use Drupal\druker\Wake;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Psr\Log\NullLogger;
 
 /**
@@ -21,6 +22,7 @@ use Psr\Log\NullLogger;
  * that tells the worker where to look.
  */
 #[Group('druker')]
+#[RunTestsInSeparateProcesses]
 class WakeTest extends KernelTestBase {
 
   /**
@@ -116,6 +118,43 @@ class WakeTest extends KernelTestBase {
     $blocked = $this->siteDirectory . '/blocked';
     file_put_contents($blocked, 'a file, not a directory');
     $this->assertFalse($this->wake([Wake::SETTING => $blocked . '/wake'])->wake(5));
+  }
+
+  /**
+   * A delay dates the signal; the sooner of two signals wins.
+   */
+  public function testDelayDatesTheSignalAndSoonerWins(): void {
+    $wake = $this->wake([Wake::SETTING => $this->siteDirectory . '/wake-delay']);
+    $path = $wake->directory() . '/9';
+    $now = time();
+
+    $this->assertTrue($wake->wake(9, 30));
+    clearstatcache();
+    $this->assertEqualsWithDelta($now + 30, filemtime($path), 2, 'The signal is not dated when the job should run.');
+
+    // A later delay leaves the sooner signal as it is.
+    $this->assertTrue($wake->wake(9, 300));
+    clearstatcache();
+    $this->assertEqualsWithDelta($now + 30, filemtime($path), 2, 'A later delay postponed the signal.');
+
+    // A sooner one brings it forward, and now is soonest.
+    $this->assertTrue($wake->wake(9, 10));
+    clearstatcache();
+    $this->assertEqualsWithDelta($now + 10, filemtime($path), 2);
+    $this->assertTrue($wake->wake(9));
+    clearstatcache();
+    $this->assertLessThanOrEqual(time(), filemtime($path), 'Asking for now did not overtake the delay.');
+
+    // And a delay never postpones a signal already due.
+    $this->assertTrue($wake->wake(9, 30));
+    clearstatcache();
+    $this->assertLessThanOrEqual(time(), filemtime($path), 'A delay postponed a signal that was due.');
+
+    // Capped, so a mistaken delay is the schedule's business.
+    unlink($path);
+    $this->assertTrue($wake->wake(9, 86400));
+    clearstatcache();
+    $this->assertLessThanOrEqual(time() + Wake::MAXIMUM_DELAY, filemtime($path));
   }
 
   /**

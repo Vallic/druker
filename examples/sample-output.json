@@ -23,7 +23,8 @@
       "overlap": false,
       "depends_on": null,
       "type": "cron",
-      "cron": "0 * * * *"
+      "cron": "0 * * * *",
+      "timeout": 1800
     },
     {
       "id": 3,

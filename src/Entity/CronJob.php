@@ -98,6 +98,13 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
   /**
    * {@inheritdoc}
    */
+  public function getTimeout(): int {
+    return max(0, (int) ($this->get('timeout')->value ?? 0));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getTimingType(): string {
     if ($this->getTimingOnce() !== NULL) {
       return CronJobInterface::TIMING_ONCE;
@@ -208,6 +215,8 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
 
     $fields['overlap'] = self::overlapFieldDefinition();
 
+    $fields['timeout'] = self::timeoutFieldDefinition();
+
     $fields['depends_on'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Run after job'))
       ->setDescription(t('If set, this job will only start after the referenced job has finished in the same cycle.'))
@@ -257,6 +266,22 @@ class CronJob extends ContentEntityBase implements CronJobInterface {
       ->setSetting('suffix', ' ' . t('seconds'))
       ->setDefaultValue(0)
       ->setDisplayOptions('form', ['type' => 'number', 'weight' => 8]);
+  }
+
+  /**
+   * The timeout field, also used by the update that adds it.
+   *
+   * Zero, the default, is "the worker's -job-timeout", which is what every job
+   * had before there was a field.
+   */
+  public static function timeoutFieldDefinition(): BaseFieldDefinition {
+    return BaseFieldDefinition::create('integer')
+      ->setLabel(t('Timeout'))
+      ->setDescription(t("Seconds one run may take before the worker ends it, with whatever it started. Leave at 0 for the worker's own -job-timeout; where both are set, the shorter wins."))
+      ->setSetting('min', 0)
+      ->setSetting('suffix', ' ' . t('seconds'))
+      ->setDefaultValue(0)
+      ->setDisplayOptions('form', ['type' => 'number', 'weight' => 16]);
   }
 
   /**

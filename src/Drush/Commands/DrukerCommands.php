@@ -129,8 +129,10 @@ final class DrukerCommands extends DrushCommands {
   #[CLI\Command(name: 'druker:wake', aliases: ['dk:wake'])]
   #[CLI\Argument(name: 'job', description: 'The job: its id, or its name when no other job has it.')]
   #[CLI\Usage(name: 'drush druker:wake 12', description: 'Run job 12 within a second or two.')]
+  #[CLI\Option(name: 'delay', description: 'Seconds to wait first. A signal due sooner is kept.')]
   #[CLI\Usage(name: 'drush druker:wake "Drupal cron"', description: 'The same, by name.')]
-  public function wake(string $job): int {
+  #[CLI\Usage(name: 'drush druker:wake 12 --delay=30', description: 'Run job 12 in half a minute.')]
+  public function wake(string $job, array $options = ['delay' => 0]): int {
     $storage = $this->entityTypeManager->getStorage('druker_job');
     $found = ctype_digit($job) ? array_filter([$storage->load((int) $job)]) : $storage->loadByProperties(['label' => $job]);
 
@@ -146,7 +148,9 @@ final class DrukerCommands extends DrushCommands {
       return self::EXIT_FAILURE;
     }
 
-    if (!$this->wake->wake($target)) {
+    $delay = max(0, (int) $options['delay']);
+
+    if (!$this->wake->wake($target, $delay)) {
       $this->logger()->error(dt('The signal could not be written, so @job runs at its next turn. Check @setting.', [
         '@job' => $target->label(),
         '@setting' => "\$settings['" . Wake::SETTING . "']",
@@ -154,7 +158,12 @@ final class DrukerCommands extends DrushCommands {
       return self::EXIT_FAILURE;
     }
 
-    $this->logger()->success(dt('@job is woken: a worker that runs it starts it within a second or two.', ['@job' => $target->label()]));
+    $this->logger()->success($delay > 0
+      ? dt('@job is woken: a worker that runs it starts it in @delay seconds, or sooner if it was already asked.', [
+        '@job' => $target->label(),
+        '@delay' => min($delay, Wake::MAXIMUM_DELAY),
+      ])
+      : dt('@job is woken: a worker that runs it starts it within a second or two.', ['@job' => $target->label()]));
     return self::EXIT_SUCCESS;
   }
 

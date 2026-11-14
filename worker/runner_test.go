@@ -370,3 +370,56 @@ func TestATimeoutIsNotAnInterruption(t *testing.T) {
 
 	runner.Wait()
 }
+
+// A job's own timeout ends it, without a worker-wide one.
+func TestAJobsOwnTimeoutEndsIt(t *testing.T) {
+	runner := shellRunner(0)
+	job := shellJob(1, "sleep 5", true)
+	job.Timeout = 1
+
+	done := make(chan struct{})
+	started := time.Now()
+	runner.Start(job, func(bool) { close(done) })
+	<-done
+
+	if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 3*time.Second {
+		t.Errorf("the job ran for %s on a timeout of 1s", elapsed)
+	}
+}
+
+// The worker's -job-timeout is a ceiling a schedule cannot lift, and the
+// limit for a job that names none.
+func TestTheWorkersTimeoutIsACeiling(t *testing.T) {
+	for _, tc := range []struct {
+		worker time.Duration
+		job    int
+		want   time.Duration
+		whose  string
+	}{
+		{0, 0, 0, ""},
+		{0, 30, 30 * time.Second, "its timeout"},
+		{time.Hour, 0, time.Hour, "-job-timeout"},
+		{time.Hour, 120, 120 * time.Second, "its timeout"},
+		{time.Minute, 3600, time.Minute, "-job-timeout"},
+		{time.Minute, 60, time.Minute, "its timeout"},
+	} {
+		got, whose := shellRunner(tc.worker).limitFor(Job{Timeout: tc.job})
+		if got != tc.want || whose != tc.whose {
+			t.Errorf("worker %s, job %ds: got %s (%q), want %s (%q)", tc.worker, tc.job, got, whose, tc.want, tc.whose)
+		}
+	}
+
+	// And it ends a job that asked for longer.
+	runner := shellRunner(500 * time.Millisecond)
+	job := shellJob(1, "sleep 5", true)
+	job.Timeout = 3600
+
+	done := make(chan struct{})
+	started := time.Now()
+	runner.Start(job, func(bool) { close(done) })
+	<-done
+
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
+		t.Errorf("a job asking for an hour ran %s past a 500ms ceiling", elapsed)
+	}
+}

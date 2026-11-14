@@ -22,6 +22,8 @@ use Symfony\Contracts\EventDispatcher\Event;
  *   - run_at: int unix timestamp (when type=once)
  *   - every: int seconds between runs (when type=interval)
  *   - offset: int seconds to shift those runs by (optional, type=interval)
+ *   - timeout: int seconds one run may take (optional; absent or 0 leaves it
+ *     to the worker's -job-timeout, and where both are set the shorter wins)
  *
  * The interval type exists for the schedules cron cannot say: every 25
  * seconds, every 75, every 90. It can also be set on a stored job in the

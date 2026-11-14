@@ -186,3 +186,37 @@ func TestWokenJobsJoinTheDueOnce(t *testing.T) {
 		t.Errorf("got %+v, want jobs 1, 2 and 3 once each", got)
 	}
 }
+
+// A signal dated in the future waits for its time, and is claimed once due.
+func TestADelayedWakeWaitsForItsTime(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	path := touchWake(t, dir, "7", now.Add(5*time.Second))
+	schedule := wakeSchedule(Job{ID: 7, Type: typeInterval, Every: 3600, Command: "x"})
+	runner := shellRunner(0)
+
+	if woken := claimWakes(dir, schedule, runner, LoadState(""), quietLogger(), now); len(woken) != 0 {
+		t.Fatalf("a signal due in 5s woke the job at once: %+v", woken)
+	}
+
+	if !exists(path) {
+		t.Fatal("a signal not yet due was removed")
+	}
+
+	if woken := claimWakes(dir, schedule, runner, LoadState(""), quietLogger(), now.Add(6*time.Second)); len(woken) != 1 {
+		t.Errorf("a signal past its time did not wake the job: %+v", woken)
+	}
+}
+
+// A date beyond any delay a site can ask for is a wrong clock: the signal
+// runs now rather than waiting for it.
+func TestAWakeDatedBeyondAnyDelayIsNow(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	touchWake(t, dir, "7", now.Add(maximumWakeDelay+time.Minute))
+	schedule := wakeSchedule(Job{ID: 7, Type: typeInterval, Every: 3600, Command: "x"})
+
+	if woken := claimWakes(dir, schedule, shellRunner(0), LoadState(""), quietLogger(), now); len(woken) != 1 {
+		t.Errorf("a signal dated by a wrong clock did not wake the job: %+v", woken)
+	}
+}
